@@ -1,23 +1,17 @@
-export { collectRules, findRuleFiles } from './collect.js'
-export { buildGraph, toDot, toMermaid } from './graph.js'
-export type { GraphEdge, GraphNode, RuleGraph } from './graph.js'
-export { buildIndex } from './index-build.js'
-export type { IndexedRule, RuleIndex } from './index-build.js'
-export { parseRule, parseRuleFile } from './parse.js'
-export { createProcessor } from './processor.js'
-export type { ProcessorOptions } from './processor.js'
-export { ruleExtract } from './plugins/rule-extract.js'
-export { ruleLint } from './plugins/rule-lint.js'
-export {
-  createContext,
-  renderCategoryPage,
-  renderContent,
-  renderIndexPage,
-  renderRuleDocument,
-  renderRulePage,
-  renderSite,
-} from './render/index.js'
-export type { RenderOptions, RenderedFile, SiteContext } from './render/index.js'
-export { frontmatterSchema, SECTION_SPEC } from './schema.js'
-export type * from './types.js'
-export { findCycles, validateRuleSet } from './validate.js'
+/**
+ * rule-kit 공개 진입점.
+ *
+ * 각 층은 자신의 하위 모듈에서 재수출한다. 이 파일은 조립만 하고
+ * 어떤 로직도 갖지 않는다 — 층 경계를 한눈에 보이게 하는 것이 유일한 목적이다.
+ */
+
+export const VERSION = '0.2.0-alpha.0'
+
+// L2 문서 객체 모델
+// export * from './model/index.js'
+
+// L1 저작 규약
+// export * from './schema/index.js'
+
+// L3 조작 프로토콜
+// export * from './api/index.js'

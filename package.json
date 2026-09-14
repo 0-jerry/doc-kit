@@ -1,12 +1,9 @@
 {
   "name": "rule-kit",
-  "version": "0.1.0",
-  "description": "프로젝트 규칙을 unified/mdast 기반으로 구조화·검증·탐색하는 도구",
+  "version": "0.2.0-alpha.0",
+  "description": "판단기준 문서를 블록 단위 트리로 구조화해 저작·검증·질의하는 도구",
   "type": "module",
   "license": "MIT",
-  "bin": {
-    "rulekit": "./dist/cli.js"
-  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -24,27 +21,27 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint:rules": "tsx src/cli.ts lint rules",
-    "build:rules": "tsx src/cli.ts build rules -o .rulekit",
-    "render:rules": "tsx src/cli.ts render rules -o .rulekit/site",
-    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "hast-util-to-html": "^9.0.5",
     "mdast-util-to-hast": "^13.2.1",
+    "mdast-util-to-markdown": "^2.1.2",
     "mdast-util-to-string": "^4.0.0",
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.0",
     "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.0.0",
     "vfile": "^6.0.3",
-    "vfile-reporter": "^8.1.1",
     "yaml": "^2.5.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/mdast": "^4.0.4",
     "@types/node": "^22.7.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2"

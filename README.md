@@ -1,284 +1,42 @@
 # rule-kit
 
-프로젝트 규칙을 **데이터로** 관리하는 도구. 규칙 문서를 [unified](https://github.com/unifiedjs/unified)/mdast 로 파싱해 타입이 있는 레코드로 환원하고, 스키마·구조·참조 무결성을 검증한 뒤, 조회용 인덱스와 관계 그래프를 만든다.
+프로젝트의 **판단기준**(원칙·컨벤션·결정 기록)을 마크다운으로 쓰되, 데이터로 다루는 도구.
 
-산문으로 흘러가던 스타일 가이드를 컴파일 가능한 모듈 집합처럼 다루는 것이 목적이다.
+문서를 블록 단위 트리로 파싱하고, 각 노드에 맥락 보조데이터(대상·주제·역할·관계·수명주기)를 붙이며,
+노드가 과도한 책임을 갖지 못하도록 몇 가지 원칙을 강제한다.
+1차 소비자는 AI 에이전트와 문서를 읽는 사람이다.
 
-- **구조화** — 규칙 하나 = 파일 하나. frontmatter 가 인터페이스, 본문이 구현.
-- **검증** — 스키마 위반, 섹션 규약 위반, 끊긴 참조, 순환 상속을 CI 에서 잡는다.
-- **탐색** — 카테고리·태그·강제도구 역인덱스와 관계 그래프(JSON/Mermaid/DOT).
-- **렌더링** — 같은 데이터 모델에서 정적 HTML 규칙집을 뽑는다. 마크다운을 다시 읽지 않는다.
-
-## 빠른 시작
-
-```bash
-npm install
-npm run lint:rules     # rulekit lint rules
-npm run build:rules    # rulekit build rules -o .rulekit
-npm run render:rules   # rulekit render rules -o .rulekit/site
-npm test
-```
-
-## 저작 형식
-
-`rules/<category>/<id>.md` — 디렉터리는 `category` 와, 파일명은 `id` 와 일치해야 한다. 규약을 파일 시스템에 고정해 두면 이름만 보고도 위치를 알 수 있다.
-
-````markdown
----
-id: use-camel-case
-title: 타입·프로토콜은 UpperCamelCase, 그 외는 lowerCamelCase 로 쓴다
-category: naming
-severity: error          # error | warning | info
-status: active           # proposed | active | deprecated | superseded
-since: 2025-08-03
-tags: [naming, casing]
-applies-to: ["Sources/**/*.swift"]
-enforced-by: [swiftlint:type_name]
-extends: [base-naming]
-related: [bool-names]
-conflicts: []
-supersedes: []
-# superseded-by: new-rule   # status: superseded 일 때만
----
-
-## Rule
-
-타입과 프로토콜 이름은 UpperCamelCase 로, 나머지 모든 식별자는 lowerCamelCase 로 쓴다.
-
-## Why
-
-대소문자만 보고 이름이 타입인지 값인지 구분되면 선언부를 찾아가지 않아도 된다.
-
-## Examples
-
-```swift
-// WRONG
-protocol space_thing { }
-```
-
-```swift
-// RIGHT
-protocol SpaceThing { }
-```
-
-## Exceptions
-
-...
-````
-
-### 섹션 규약
-
-`## Rule` → `## Why` → `## Examples` → `## Exceptions` → `## Migration` → `## References` 순서. `Rule`/`Why` 는 필수, 나머지는 선택이며 순서만 지키면 된다. H1 은 쓰지 않는다 — 제목은 `frontmatter.title` 이 소유한다.
-
-`## Rule` 은 규범 진술 전용이다. 3문장을 넘으면 근거가 섞였다는 뜻이므로 `## Why` 로 내려보내라는 경고가 뜬다.
-
-예시 코드블록의 첫 줄 주석 `// WRONG` · `// RIGHT` 는 극성으로 파싱되어 인덱스에 들어간다. 한쪽만 있으면 경고한다.
-
-## 검증 규칙
-
-| 코드 | 대상 | 내용 |
-| --- | --- | --- |
-| `FM001` | frontmatter | 블록 없음 (치명적) |
-| `FM002` | frontmatter | YAML 파싱 실패 (치명적) |
-| `FM003` | frontmatter | 스키마 위반 — 필드 경로와 함께 보고 (치명적) |
-| `FM004` | 위치 | 파일명 ≠ `id` |
-| `FM005` | 위치 | 디렉터리 ≠ `category` |
-| `FM006` | 수명 주기 | `status: superseded` ↔ `superseded-by` 불일치 |
-| `DOC001` | 본문 | H1 사용 |
-| `DOC002` | 본문 | 필수 섹션 누락 (`Rule` 누락은 치명적) |
-| `DOC003` | 본문 | 규약에 없는 섹션 |
-| `DOC004` | 본문 | 섹션 순서 위반 |
-| `DOC005` | 본문 | 섹션 중복 |
-| `DOC006` | 본문 | 규범 진술이 비었거나 너무 김 |
-| `DOC007` | 본문 | 코드블록 언어 태그 누락 |
-| `DOC008` | 본문 | `## Examples` 에 코드블록 없음 |
-| `DOC009` | 본문 | 예시 극성이 한쪽뿐 |
-| `DOC010` | 본문 | 첫 섹션 제목 앞의 떠도는 내용 |
-| `DOC011` | 본문 | 섹션 제목이 H2 가 아님 |
-| `DOC012` | 본문 | `severity: error` 인 활성 규칙에 근거 없음 |
-| `REF001` | 참조 | 존재하지 않는 규칙 참조 |
-| `REF002` | 참조 | 자기 참조 |
-| `REF003` | 참조 | `id` 중복 |
-| `REF004` | 참조 | `extends` 순환 |
-| `REF005` | 참조 | deprecated/superseded 규칙을 활성 규칙이 참조 |
-| `REF006` | 참조 | `conflicts` 가 단방향 |
-| `REF007` | 참조 | `superseded-by` 가 단방향 |
-
-## CLI
-
-```bash
-rulekit lint  [rules-dir] [--json] [--quiet] [--strict] [--max-sentences <n>]
-rulekit build [rules-dir] [-o <out-dir>] [--format json|mermaid|dot] [--strict]
-rulekit render [rules-dir] [-o <out-dir>] [--site-title <name>]
-               [--source-base <url>] [--inline-assets] [--dry-run]
-```
-
-`lint` 는 오류가 있으면 종료 코드 1 을 낸다. `--strict` 를 주면 경고도 실패로 취급한다(CI 권장).
-
-`build` 는 `-o` 디렉터리에 세 파일을 쓴다.
-
-- `rules.index.json` — 규칙 레코드 + `byCategory` / `byTag` / `byEnforcer` 역인덱스
-- `rules.graph.json` — 노드·간선, `orphans`, `cycles`, `dangling`, `depth`
-- `rules.graph.mmd` — Mermaid 플로차트
-
-`--format mermaid|dot` 을 주면 파일을 쓰지 않고 그래프만 stdout 으로 내보낸다.
-
-## 렌더링
-
-`render` 는 lint 를 통과한 규칙 모음을 정적 HTML 사이트로 만든다. 입력은 마크다운 원문이 아니라 **파싱을 마친 데이터 모델**(`Rule` · `RuleIndex` · `RuleGraph`)이다. 즉 lint 가 보는 것과 렌더러가 보는 것이 같다.
-
-```
-index.html                      통계 · 카테고리별 카드 · 클라이언트 필터 · 그래프 진단
-categories/<category>.html      카테고리별 목록
-rules/<category>/<id>.html      규칙 상세 (메타 · 섹션 · 관계 · 역참조)
-assets/style.css, assets/app.js 외부 의존성 없는 자산
-```
-
-데이터 모델이 알고 있는 것을 그대로 마크업에 남긴다.
-
-- 섹션은 mdast(`RuleSection.content`)에서 그리므로 목록·표·강조가 살아 있다.
-- 코드블록의 예시 극성은 `figure.example--right` / `--wrong` 과 `data-polarity` 가 된다.
-- 관계는 `RuleGraph` 의 간선으로 잇고, 역방향 간선은 **참조됨** 목록이 된다. 대상이 없는 참조는 링크 대신 취소선으로 남는다.
-- 필터는 `data-category` · `data-severity` · `data-status` · `data-tags` 속성으로 동작한다. 빌드 시점에 인덱스가 이미 계산해 둔 값이다.
-- 본문의 원시 HTML 은 버리고 나머지는 전부 이스케이프한다.
-
-`--inline-assets` 는 CSS·JS 를 각 문서에 넣어 파일 하나만 열어도 동작하게 한다. `--source-base` 는 원문 마크다운으로 가는 링크 접두사(예: GitHub blob URL)다. 같은 입력과 같은 `generatedAt` 이면 산출물은 바이트까지 같다.
-
-## 프로그래밍 API
-
-```ts
-import { collectRules, validateRuleSet, buildIndex, buildGraph } from 'rule-kit'
-
-const set = validateRuleSet(await collectRules('rules'))
-const index = buildIndex(set)
-const graph = buildGraph(set)
-
-// 이 태그의 error 규칙만
-const blocking = index.rules.filter(
-  (r) => r.severity === 'error' && r.tags.includes('concurrency'),
-)
-
-// SwiftLint 설정과 문서가 어긋나는지 대조
-const documented = new Set(Object.keys(index.byEnforcer))
-```
-
-렌더러도 같은 데이터 모델을 받는다. 파일을 쓰지 않고 경로·내용 쌍만 돌려주므로 원하는 곳에 흘려보내면 된다.
-
-```ts
-import { renderSite, renderRuleDocument } from 'rule-kit'
-
-for (const file of renderSite(set, { title: '우리 팀 규칙집' })) {
-  await write(path.join('out', file.path), file.content)
-}
-
-const one = renderRuleDocument(set, 'use-camel-case') // 자산까지 인라인된 단일 문서
-```
-
-파이프라인 자체가 필요하면 unified 플러그인을 직접 조립해도 된다.
-
-```ts
-import { unified } from 'unified'
-import remarkParse from 'remark-parse'
-import remarkFrontmatter from 'remark-frontmatter'
-import { ruleExtract, ruleLint } from 'rule-kit'
-
-const processor = unified()
-  .use(remarkParse)
-  .use(remarkFrontmatter, ['yaml'])
-  .use(ruleExtract, { root: 'rules' })
-  .use(ruleLint, { maxStatementSentences: 2 })
-```
-
-`ruleExtract` 는 결과를 `file.data.rule` 에, 섹션을 `file.data.sections` 에 담는다. 진단은 모두 표준 vfile 메시지라 기존 remark/eslint 리포터와 그대로 섞인다.
+> **상태: 재설계 진행 중 (v0.2 alpha).**
+> v0.1 구현은 특정 프로젝트의 규칙 문서 문법에 묶여 있어 전면 초기화했다.
+> 설계는 [docs/design/0001-재설계.md](docs/design/0001-재설계.md) 를 참고. 이전 구현은 git 히스토리에 남아 있다.
 
 ## 구조
 
-```
-src/
-  types.ts              도메인 타입
-  schema.ts             frontmatter zod 스키마 + 섹션 규약
-  plugins/rule-extract.ts   mdast → 규칙 레코드
-  plugins/rule-lint.ts      구조 규약 검사
-  processor.ts          unified 파이프라인
-  parse.ts / collect.ts 단일 파일 / 디렉터리 진입점
-  validate.ts           규칙 간 참조 무결성
-  graph.ts              그래프 · Mermaid · DOT
-  index-build.ts        조회용 인덱스
-  render/context.ts     렌더 컨텍스트(인덱스 · 그래프 · 역참조)
-  render/markdown.ts    mdast → HTML (예시 극성 · 링크 재작성)
-  render/pages.ts       인덱스 · 카테고리 · 규칙 페이지
-  render/site.ts        사이트 조립
-  render/html.ts        이스케이프 · 요소 조립
-  render/assets.ts      CSS · JS
-  cli.ts                lint · build · render · import
-```
+세 층으로 나뉘며 의존은 한 방향으로만 흐른다.
 
-## 마이그레이션
-
-기존 규칙 문서를 규칙 파일 트리로 정규화하는 `rulekit import` 에는 두 가지 프로파일이 있다.
-
-### `--profile anchor-list` (기본)
-
-Airbnb 계열 스타일 가이드가 공유하는 앵커 규약, 즉 **한 파일에 규칙 수백 개**가 목록 항목으로 들어 있는 형태를 분해한다.
-
-| 원문 | 결과 |
-| --- | --- |
-| `<a id='...'>` | `id` (kebab-case 로 정규화, 원본은 별칭·원문 링크로 보존) |
-| 굵은 글씨 | `## Rule` + `title` |
-| 굵은 글씨 뒤 부연, `#### Why?` | `## Why` |
-| `<details>` 안의 코드블록 | `## Examples` |
-| `_Exception: ..._` | `## Exceptions` |
-| `[![SwiftFormat: x]](...)` 배지 | `enforced-by: [swiftformat:x]` |
-| 배지 유무 | `severity` (있으면 `error`, 없으면 `warning`) |
-| `## 제목` / `### 제목` | `category` / `tags` |
-| 본문의 `[...](#other-id)` | `related` |
-
-```bash
-rulekit import path/to/GUIDE.md -o rules --source-link ../GUIDE.md
-```
-
-### `--profile doc-tree`
-
-**이미 문서별로 쪼개져 있는** 규칙 트리를 정규화한다. 문서 하나가 규칙 하나이고, 문서 간 링크가 관계가 된다.
-
-| 원문 | 결과 |
-| --- | --- |
-| H1 | `title` |
-| `**상태**: 정본` / `**작성일**:` | `status` / `since` |
-| `[부모](../x.md)의 규칙 문서입니다.` | `extends` |
-| 마지막 목록까지의 산문·목록 | `## Rule` |
-| 그 뒤의 산문 | `## Why` |
-| 코드블록 | `## Examples` |
-| H2 섹션 (`--section-map`) | 매핑된 섹션, 미매핑은 `rule` |
-| 문서 간 링크 | `related` 또는 `## References` |
-
-문서 레지스트리(TSV)를 주면 그것이 `id`·`title`·`summary`·`scope` 의 정본이 된다.
-
-```bash
-rulekit import docs --profile doc-tree -o rules \
-  --registry docs/registry/documents.tsv \
-  --scopes docs/registry/document_scopes.tsv \
-  --repo-root . --kinds rule,package-rule
-```
-
-**상대 링크는 전부 다시 쓴다.** 대상이 수입된 규칙이면 새 트리 안의 경로로, 아니면 원문 문서를 계속 가리키도록 경로를 다시 계산한다. 생성된 파일에 남지 않는 앵커는 떨어내고 그 수를 보고한다. `--doc-base` 를 주면 수입되지 않은 문서로 가는 링크에 접두사를 붙인다(저장소 밖으로 나가는 긴 상대 경로 대신 URL 등을 쓸 때).
-
-원문에 심각도 신호가 없으므로 `severity` 는 전부 `--severity` 값(기본 `error`)이 된다. 이것은 추론이 아니라 **명시된 가정**이다.
-
-### 적용 사례
-
-`examples/` 에 두 코퍼스를 분해한 결과가 들어 있다.
-
-| | Swift-Style | Git-It-iOS |
+| 층 | 위치 | 책임 |
 | --- | --- | --- |
-| 원문 | `README.md` 5,824줄 | `docs/` 문서 110개 |
-| 프로파일 | `anchor-list` | `doc-tree` |
-| 규칙 | 133 · 카테고리 9 | 110 · 카테고리 11 |
-| 관계 간선 | 7 (고립 122) | 122 (고립 45) |
-| lint | 오류 0 · 경고 69 | 오류 0 · 경고 112 |
+| L1 저작 규약 | `src/schema/` | 문서 타입·섹션 구성·역할·어휘를 사용자가 선언. 내장 프리셋 제공 |
+| L2 문서 객체 모델 | `src/model/` | `Document → Section → Block` 트리와 보조데이터. 아무것도 import 하지 않는다 |
+| L3 조작 프로토콜 | `src/api/` | JSON 직렬화 가능한 명령 객체. 에이전트와 CLI 의 공통 입력 |
 
-## 다음 단계 (미구현)
+나머지는 이 셋 위에 얹힌다 — `parse` `serialize` `validate` `index` `query` `render` `cli`.
 
-- `rulekit query` — 태그·심각도·적용 범위로 조회하고 JSON 으로 내보내기
-- `rulekit drift` — `byEnforcer` 인덱스와 린터 설정 파일을 대조 (지금은 수동 스크립트)
-- `rulekit link-check` — 생성된 트리의 상대 링크 해석 검증 (지금은 import 단계에서만 집계)
+## 개발
+
+```bash
+npm install
+npm run typecheck
+npm test
+```
+
+## 구현 순서
+
+1. ~~초기화~~
+2. `model` — 트리·보조데이터 상속·주소 체계
+3. `schema` — 선언 로더와 프리셋 3종
+4. `parse` / `serialize` — 왕복 보존
+5. `validate` — 원칙 검사기
+6. `api` — 명령 객체와 dry-run
+7. `index` / `query` — 에이전트 진입점
+8. `render` — 사람용 출력
