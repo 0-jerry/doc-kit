@@ -4,7 +4,7 @@
 
 import { type Aux, EMPTY_AUX } from './aux.js'
 import type { Block } from './block.js'
-import { type Branch, NodeBase } from './node.js'
+import { type Branch, NodeBase, type Origin } from './node.js'
 
 /** 트리에서 문서의 자손이 될 수 있는 것. */
 export type Child = Section | Block
@@ -23,6 +23,8 @@ export interface SectionInit {
   readonly raw?: string | null
   /** 제목 앞에 붙은 디렉티브 주석의 원문 조각. 보조데이터가 바뀌면 버린다. */
   readonly directiveRaw?: string | null
+  /** 원문에서 이 조각이 차지한 범위. 제목이 바뀌면 버린다. */
+  readonly origin?: Origin | null
   readonly aux?: Aux
   readonly stableId?: string | null
 }
@@ -36,6 +38,7 @@ export class Section extends NodeBase implements Branch {
   readonly raw: string | null
   readonly directiveRaw: string | null
   readonly line: number | null
+  readonly origin: Origin | null
 
   constructor(init: SectionInit) {
     super(init.aux ?? EMPTY_AUX, init.stableId ?? null)
@@ -46,6 +49,7 @@ export class Section extends NodeBase implements Branch {
     this.raw = init.raw ?? null
     this.directiveRaw = init.directiveRaw ?? null
     this.line = init.line ?? null
+    this.origin = init.origin ?? null
   }
 
   get sections(): readonly Section[] {
@@ -67,6 +71,7 @@ export class Section extends NodeBase implements Branch {
       line: patch.line === undefined ? this.line : patch.line,
       children: patch.children ?? this.children,
       raw: patch.raw !== undefined ? patch.raw : headingChanged ? null : this.raw,
+      origin: patch.origin !== undefined ? patch.origin : headingChanged ? null : this.origin,
       directiveRaw:
         patch.directiveRaw !== undefined
           ? patch.directiveRaw

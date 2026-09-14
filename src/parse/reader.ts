@@ -237,6 +237,7 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
     const directiveRaw =
       unit.directiveStart === null ? null : text.slice(unit.directiveStart, bodyStart)
     const raw = text.slice(bodyStart, end)
+    const origin = { start: unit.directiveStart ?? bodyStart, end }
 
     const declared = buildAux(unit.entries, schema)
     for (const problem of declared.problems) report('PRS004', 'error', problem, line)
@@ -275,6 +276,7 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
           stableId: declared.stableId,
           raw,
           directiveRaw,
+          origin,
         },
       }
       const parent = stack[stack.length - 1]
@@ -295,6 +297,7 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
       source: node,
       raw,
       directiveRaw,
+      origin,
       // 기본 역할은 읽는 시점에 해소한다. 이후 층은 aux.role 만 보면 된다.
       aux: makeAux({ ...declared.aux, ...(role === undefined ? {} : { role }) }),
       stableId: declared.stableId,
@@ -308,6 +311,8 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
     type,
     path,
     raw: documentRaw,
+    origin: { start: 0, end: documentRaw.length },
+    sourceLength: text.length,
     aux: documentAux.aux,
     children: roots.map((child) => (child instanceof Block ? child : toSection(child))),
   })

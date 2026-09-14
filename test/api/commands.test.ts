@@ -294,3 +294,112 @@ test('섹션을 새로 끼워도 앞 블록과 갈라진다', () => {
   const output = serializeDocument(result.document!, { schema })
   assert.ok(output.includes('설명이다.\n\n## 예시\n'))
 })
+
+/**
+ * 원문에서 빈 줄 없이 붙어 있던 블록을 옮기거나 빼면 옆 블록과 맞닿는다.
+ * 그대로 이으면 두 블록이 하나로 읽혀 옮긴 블록의 정체가 사라진다.
+ */
+const TIGHT = `---
+type: principle
+id: sample
+---
+
+떠도는 문단이다.
+## 기준
+
+진술이다.
+
+## 근거
+
+남는 문단이다.
+`
+
+function readTight() {
+  return parseDocument(TIGHT, {
+    schema,
+    path: 'principle/sample.md',
+    collection: 'principle',
+    name: 'sample',
+  }).document!
+}
+
+function reread(text: string) {
+  return parseDocument(text, {
+    schema,
+    path: 'principle/sample.md',
+    collection: 'principle',
+    name: 'sample',
+  }).document!
+}
+
+test('옮긴 블록은 새 이웃과 빈 줄로 갈라진다', () => {
+  const moved = applyCommand(
+    readTight(),
+    { op: 'node.move', at: '0', to: 'rationale', position: 'end' },
+    options,
+  )
+  assert.equal(moved.ok, true)
+  const output = serializeDocument(moved.document!, { schema })
+  assert.ok(output.includes('남는 문단이다.\n\n떠도는 문단이다.\n'))
+  assert.deepEqual(
+    reread(output).sections[1]?.blocks.map((block) => block.text),
+    ['남는 문단이다.', '떠도는 문단이다.'],
+  )
+})
+
+test('앞쪽으로 옮겨도 뒤 이웃과 갈라진다', () => {
+  const moved = applyCommand(
+    readTight(),
+    { op: 'node.move', at: '0', to: 'rationale', position: 'start' },
+    options,
+  )
+  const output = serializeDocument(moved.document!, { schema })
+  assert.deepEqual(
+    reread(output).sections[1]?.blocks.map((block) => block.text),
+    ['떠도는 문단이다.', '남는 문단이다.'],
+  )
+})
+
+test('사이에 있던 블록을 빼도 남은 둘이 갈라진다', () => {
+  const text = `---
+type: principle
+id: sample
+---
+
+## 기준
+
+첫째 문단이다.
+- 가운데 목록이다.
+
+셋째 문단이다.
+
+## 근거
+
+설명이다.
+`
+  const document = reread(text)
+  // 원문에서 셋은 빈 줄 없이 맞닿아 있다
+  assert.deepEqual(
+    document.sections[0]?.blocks.map((block) => block.form),
+    ['paragraph', 'list', 'paragraph'],
+  )
+
+  const removed = applyCommand(document, { op: 'block.remove', at: 'norm/1' }, options)
+  assert.equal(removed.ok, true)
+  const output = serializeDocument(removed.document!, { schema })
+  assert.deepEqual(
+    reread(output).sections[0]?.blocks.map((block) => block.text),
+    ['첫째 문단이다.', '셋째 문단이다.'],
+  )
+})
+
+test('끝으로 옮긴 블록이 꼬리에 빈 줄을 남기지 않는다', () => {
+  const moved = applyCommand(
+    read(),
+    { op: 'node.move', at: 'core', to: 'rationale', position: 'end' },
+    options,
+  )
+  const output = serializeDocument(moved.document!, { schema })
+  assert.ok(output.endsWith('진술이다.\n'))
+  assert.ok(!output.endsWith('\n\n'))
+})

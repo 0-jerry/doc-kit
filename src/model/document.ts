@@ -14,7 +14,7 @@ import {
   pathFragment,
   sectionStep,
 } from './id.js'
-import { type Branch, NodeBase } from './node.js'
+import { type Branch, NodeBase, type Origin } from './node.js'
 import type { Child, Section } from './section.js'
 
 /** 자식을 가질 수 있는 노드. */
@@ -38,6 +38,10 @@ export interface DocumentInit {
   readonly children?: readonly Child[]
   /** frontmatter 가 차지한 원문 조각. 첫 자식 앞까지다. */
   readonly raw?: string | null
+  /** frontmatter 조각이 원문에서 차지한 범위. */
+  readonly origin?: Origin | null
+  /** 읽어 들인 원문 전체의 길이. 마지막 노드가 원래도 마지막이었는지 가린다. */
+  readonly sourceLength?: number | null
   readonly aux?: Aux
 }
 
@@ -48,6 +52,8 @@ export class Document extends NodeBase implements Branch {
   readonly path: string
   readonly children: readonly Child[]
   readonly raw: string | null
+  readonly origin: Origin | null
+  readonly sourceLength: number | null
 
   #stableIndex: ReadonlyMap<string, Visit> | null = null
 
@@ -58,6 +64,8 @@ export class Document extends NodeBase implements Branch {
     this.path = init.path
     this.children = init.children ?? []
     this.raw = init.raw ?? null
+    this.origin = init.origin ?? null
+    this.sourceLength = init.sourceLength ?? null
   }
 
   get sections(): readonly Section[] {
@@ -145,6 +153,9 @@ export class Document extends NodeBase implements Branch {
       path: patch.path ?? this.path,
       children: patch.children ?? this.children,
       raw: patch.raw !== undefined ? patch.raw : frontmatterChanged ? null : this.raw,
+      origin: patch.origin !== undefined ? patch.origin : frontmatterChanged ? null : this.origin,
+      sourceLength:
+        patch.sourceLength === undefined ? this.sourceLength : patch.sourceLength,
       aux: patch.aux ?? this.aux,
     })
   }

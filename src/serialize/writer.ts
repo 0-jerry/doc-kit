@@ -14,6 +14,7 @@ import {
   Block,
   type Child,
   Document,
+  type Origin,
   type Parent,
   Section,
   parseDocumentId,
@@ -98,10 +99,10 @@ function isDefaultRole(
   return schema.defaultRoleAt(document.type, path) === node.aux.role
 }
 
-/** 노드 하나가 내놓는 조각. `generated` 는 원문 조각이 아니라 새로 쓴 것임을 뜻한다. */
+/** 노드 하나가 내놓는 조각. 새로 쓴 조각에는 원문 범위가 없다. */
 interface Chunk {
   readonly text: string
-  readonly generated: boolean
+  readonly origin: Origin | null
 }
 
 function serializeChildren(
@@ -115,7 +116,10 @@ function serializeChildren(
     const childPath = child instanceof Section ? [...path, child.key] : path
     const skipRole = child instanceof Block && isDefaultRole(child, path, document, options.schema)
     const directive = child.directiveRaw ?? renderDirective(child, skipRole)
-    out.push({ text: directive + (child.raw ?? renderBody(child)), generated: child.raw === null })
+    out.push({
+      text: directive + (child.raw ?? renderBody(child)),
+      origin: child.raw === null ? null : child.origin,
+    })
     if (child instanceof Section) {
       serializeChildren(child, childPath, document, options, out)
     }
@@ -123,34 +127,51 @@ function serializeChildren(
 }
 
 /**
+ * 두 조각이 원문에서도 이웃이었는가.
+ *
+ * 이웃이었다면 앞 조각의 꼬리가 곧 작성자가 쓴 간격이므로 그대로 둔다.
+ * 새로 쓴 조각이나 다른 데서 옮겨 온 조각에는 그 보장이 없다.
+ */
+function wereAdjacent(previous: Chunk, next: Chunk): boolean {
+  if (previous.origin === null || next.origin === null) return false
+  return previous.origin.end === next.origin.start
+}
+
+/**
  * 조각들을 잇는다.
  *
- * 손대지 않은 이웃끼리는 원문의 간격을 그대로 둔다 — 그래야 왕복이 바이트 단위로 같다.
- * 한쪽이라도 새로 쓴 것이면 빈 줄을 보장한다. 빈 줄 없이 이으면 두 블록이 하나로
- * 읽혀 분리해 둔 책임이 사라지기 때문이다.
+ * 원래 이웃이던 조각끼리는 원문의 간격을 그대로 둔다 — 그래야 왕복이 바이트 단위로 같다.
+ * 그 밖의 경계에는 빈 줄을 보장한다. 빈 줄 없이 이으면 두 블록이 하나로 읽혀
+ * 분리해 둔 책임과 거기 붙은 보조데이터가 사라지기 때문이다.
  */
-function join(chunks: readonly Chunk[]): string {
+function join(chunks: readonly Chunk[], sourceLength: number | null): string {
   let text = ''
   let previous: Chunk | null = null
 
   for (const chunk of chunks) {
     if (chunk.text === '') continue
-    if (previous !== null && (previous.generated || chunk.generated) && !text.endsWith('\n\n')) {
+    if (previous !== null && !wereAdjacent(previous, chunk) && !text.endsWith('\n\n')) {
       text += text.endsWith('\n') ? '\n' : '\n\n'
     }
     text += chunk.text
     previous = chunk
   }
 
-  // 새로 쓴 조각으로 끝났으면 꼬리의 빈 줄을 한 줄로 줄인다.
-  return previous?.generated === true ? text.replace(/\n+$/, '\n') : text
+  if (text === '') return text
+  // 원래 마지막이던 조각으로 끝났으면 그 꼬리가 원문의 끝이다. 아니면 한 줄로 줄인다.
+  const endsAsBefore =
+    previous !== null && previous.origin !== null && previous.origin.end === sourceLength
+  return endsAsBefore ? text : text.replace(/\n+$/, '\n')
 }
 
 /** 문서를 마크다운 문자열로 되돌린다. */
 export function serializeDocument(document: Document, options: SerializeOptions = {}): string {
   const chunks: Chunk[] = [
-    { text: document.raw ?? renderFrontmatter(document), generated: document.raw === null },
+    {
+      text: document.raw ?? renderFrontmatter(document),
+      origin: document.raw === null ? null : document.origin,
+    },
   ]
   serializeChildren(document, [], document, options, chunks)
-  return join(chunks)
+  return join(chunks, document.sourceLength)
 }

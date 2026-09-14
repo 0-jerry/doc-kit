@@ -148,3 +148,49 @@ test('윈도 줄바꿈도 보존한다', () => {
   const text = '---\r\ntype: principle\r\nid: sample\r\n---\r\n\r\n## 기준\r\n\r\n진술.\r\n'
   assert.equal(roundtrip(text), text)
 })
+
+/**
+ * 조각을 이어 붙일 때 간격이 무너지지 않는지 본다.
+ * 원래 이웃이던 조각끼리는 원문 간격을 그대로, 그 밖의 경계에는 빈 줄을 보장한다.
+ */
+const SPACING: Record<string, string> = {
+  '빈 줄 없이 붙은 목록과 제목': `---
+type: principle
+id: sample
+---
+
+## 기준
+
+- 항목 하나
+## 근거
+
+설명이다.
+`,
+
+  'frontmatter 뒤에 빈 줄이 없음': `---
+type: principle
+id: sample
+---
+## 기준
+
+진술이다.
+`,
+
+  '끝에 빈 줄이 남아 있음': `---
+type: principle
+id: sample
+---
+
+## 기준
+
+진술이다.
+
+
+`,
+}
+
+for (const [name, text] of Object.entries(SPACING)) {
+  test(`왕복 보존 — ${name}`, () => {
+    assert.equal(roundtrip(text), text)
+  })
+}

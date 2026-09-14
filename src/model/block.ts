@@ -5,7 +5,7 @@
 
 import type { RootContent } from 'mdast'
 import { type Aux, EMPTY_AUX } from './aux.js'
-import { type Leaf, NodeBase } from './node.js'
+import { type Leaf, NodeBase, type Origin } from './node.js'
 
 /**
  * 블록의 거친 분류. 스키마가 역할별 요구사항을 걸 때 쓴다(예: `example` 은 `code` 필요).
@@ -27,6 +27,8 @@ export interface BlockInit {
   readonly raw?: string | null
   /** 앞에 붙은 디렉티브 주석의 원문 조각. 보조데이터가 바뀌면 버린다. */
   readonly directiveRaw?: string | null
+  /** 원문에서 이 조각이 차지한 범위. 본문이 바뀌면 버린다. */
+  readonly origin?: Origin | null
   readonly aux?: Aux
   readonly stableId?: string | null
 }
@@ -38,6 +40,7 @@ export class Block extends NodeBase implements Leaf {
   readonly source: RootContent
   readonly raw: string | null
   readonly directiveRaw: string | null
+  readonly origin: Origin | null
 
   constructor(init: BlockInit) {
     super(init.aux ?? EMPTY_AUX, init.stableId ?? null)
@@ -46,6 +49,7 @@ export class Block extends NodeBase implements Leaf {
     this.source = init.source
     this.raw = init.raw ?? null
     this.directiveRaw = init.directiveRaw ?? null
+    this.origin = init.origin ?? null
   }
 
   /** 원문에서의 시작 줄. 없으면 null. */
@@ -66,6 +70,7 @@ export class Block extends NodeBase implements Leaf {
       text: patch.text ?? this.text,
       source: patch.source ?? this.source,
       raw: patch.raw !== undefined ? patch.raw : bodyChanged ? null : this.raw,
+      origin: patch.origin !== undefined ? patch.origin : bodyChanged ? null : this.origin,
       directiveRaw:
         patch.directiveRaw !== undefined
           ? patch.directiveRaw
