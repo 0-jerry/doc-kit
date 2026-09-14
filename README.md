@@ -7,6 +7,7 @@
 - **구조화** — 규칙 하나 = 파일 하나. frontmatter 가 인터페이스, 본문이 구현.
 - **검증** — 스키마 위반, 섹션 규약 위반, 끊긴 참조, 순환 상속을 CI 에서 잡는다.
 - **탐색** — 카테고리·태그·강제도구 역인덱스와 관계 그래프(JSON/Mermaid/DOT).
+- **렌더링** — 같은 데이터 모델에서 정적 HTML 규칙집을 뽑는다. 마크다운을 다시 읽지 않는다.
 
 ## 빠른 시작
 
@@ -14,6 +15,7 @@
 npm install
 npm run lint:rules     # rulekit lint rules
 npm run build:rules    # rulekit build rules -o .rulekit
+npm run render:rules   # rulekit render rules -o .rulekit/site
 npm test
 ```
 
@@ -107,6 +109,8 @@ protocol SpaceThing { }
 ```bash
 rulekit lint  [rules-dir] [--json] [--quiet] [--strict] [--max-sentences <n>]
 rulekit build [rules-dir] [-o <out-dir>] [--format json|mermaid|dot] [--strict]
+rulekit render [rules-dir] [-o <out-dir>] [--site-title <name>]
+               [--source-base <url>] [--inline-assets] [--dry-run]
 ```
 
 `lint` 는 오류가 있으면 종료 코드 1 을 낸다. `--strict` 를 주면 경고도 실패로 취급한다(CI 권장).
@@ -118,6 +122,27 @@ rulekit build [rules-dir] [-o <out-dir>] [--format json|mermaid|dot] [--strict]
 - `rules.graph.mmd` — Mermaid 플로차트
 
 `--format mermaid|dot` 을 주면 파일을 쓰지 않고 그래프만 stdout 으로 내보낸다.
+
+## 렌더링
+
+`render` 는 lint 를 통과한 규칙 모음을 정적 HTML 사이트로 만든다. 입력은 마크다운 원문이 아니라 **파싱을 마친 데이터 모델**(`Rule` · `RuleIndex` · `RuleGraph`)이다. 즉 lint 가 보는 것과 렌더러가 보는 것이 같다.
+
+```
+index.html                      통계 · 카테고리별 카드 · 클라이언트 필터 · 그래프 진단
+categories/<category>.html      카테고리별 목록
+rules/<category>/<id>.html      규칙 상세 (메타 · 섹션 · 관계 · 역참조)
+assets/style.css, assets/app.js 외부 의존성 없는 자산
+```
+
+데이터 모델이 알고 있는 것을 그대로 마크업에 남긴다.
+
+- 섹션은 mdast(`RuleSection.content`)에서 그리므로 목록·표·강조가 살아 있다.
+- 코드블록의 예시 극성은 `figure.example--right` / `--wrong` 과 `data-polarity` 가 된다.
+- 관계는 `RuleGraph` 의 간선으로 잇고, 역방향 간선은 **참조됨** 목록이 된다. 대상이 없는 참조는 링크 대신 취소선으로 남는다.
+- 필터는 `data-category` · `data-severity` · `data-status` · `data-tags` 속성으로 동작한다. 빌드 시점에 인덱스가 이미 계산해 둔 값이다.
+- 본문의 원시 HTML 은 버리고 나머지는 전부 이스케이프한다.
+
+`--inline-assets` 는 CSS·JS 를 각 문서에 넣어 파일 하나만 열어도 동작하게 한다. `--source-base` 는 원문 마크다운으로 가는 링크 접두사(예: GitHub blob URL)다. 같은 입력과 같은 `generatedAt` 이면 산출물은 바이트까지 같다.
 
 ## 프로그래밍 API
 
@@ -135,6 +160,18 @@ const blocking = index.rules.filter(
 
 // SwiftLint 설정과 문서가 어긋나는지 대조
 const documented = new Set(Object.keys(index.byEnforcer))
+```
+
+렌더러도 같은 데이터 모델을 받는다. 파일을 쓰지 않고 경로·내용 쌍만 돌려주므로 원하는 곳에 흘려보내면 된다.
+
+```ts
+import { renderSite, renderRuleDocument } from 'rule-kit'
+
+for (const file of renderSite(set, { title: '우리 팀 규칙집' })) {
+  await write(path.join('out', file.path), file.content)
+}
+
+const one = renderRuleDocument(set, 'use-camel-case') // 자산까지 인라인된 단일 문서
 ```
 
 파이프라인 자체가 필요하면 unified 플러그인을 직접 조립해도 된다.
@@ -167,7 +204,13 @@ src/
   validate.ts           규칙 간 참조 무결성
   graph.ts              그래프 · Mermaid · DOT
   index-build.ts        조회용 인덱스
-  cli.ts                lint · build
+  render/context.ts     렌더 컨텍스트(인덱스 · 그래프 · 역참조)
+  render/markdown.ts    mdast → HTML (예시 극성 · 링크 재작성)
+  render/pages.ts       인덱스 · 카테고리 · 규칙 페이지
+  render/site.ts        사이트 조립
+  render/html.ts        이스케이프 · 요소 조립
+  render/assets.ts      CSS · JS
+  cli.ts                lint · build · render · import
 ```
 
 ## 마이그레이션
@@ -237,6 +280,5 @@ rulekit import docs --profile doc-tree -o rules \
 ## 다음 단계 (미구현)
 
 - `rulekit query` — 태그·심각도·적용 범위로 조회하고 JSON 으로 내보내기
-- `rulekit render` — 인덱스에서 목차·색인이 붙은 통합 문서 생성
 - `rulekit drift` — `byEnforcer` 인덱스와 린터 설정 파일을 대조 (지금은 수동 스크립트)
 - `rulekit link-check` — 생성된 트리의 상대 링크 해석 검증 (지금은 import 단계에서만 집계)
