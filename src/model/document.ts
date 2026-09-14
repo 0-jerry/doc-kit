@@ -36,6 +36,8 @@ export interface DocumentInit {
   /** 저장소 루트 기준 원본 파일 경로. */
   readonly path: string
   readonly children?: readonly Child[]
+  /** frontmatter 가 차지한 원문 조각. 첫 자식 앞까지다. */
+  readonly raw?: string | null
   readonly aux?: Aux
 }
 
@@ -45,6 +47,7 @@ export class Document extends NodeBase implements Branch {
   readonly type: string
   readonly path: string
   readonly children: readonly Child[]
+  readonly raw: string | null
 
   #stableIndex: ReadonlyMap<string, Visit> | null = null
 
@@ -54,6 +57,7 @@ export class Document extends NodeBase implements Branch {
     this.type = init.type
     this.path = init.path
     this.children = init.children ?? []
+    this.raw = init.raw ?? null
   }
 
   get sections(): readonly Section[] {
@@ -123,12 +127,16 @@ export class Document extends NodeBase implements Branch {
     }
   }
 
+  /** frontmatter 에 적히는 것이 바뀌면 원문 조각을 버린다 — id 와 type 도 거기 적힌다. */
   with(patch: Partial<DocumentInit>): Document {
+    const frontmatterChanged =
+      patch.aux !== undefined || patch.id !== undefined || patch.type !== undefined
     return new Document({
       id: patch.id ?? this.id,
       type: patch.type ?? this.type,
       path: patch.path ?? this.path,
       children: patch.children ?? this.children,
+      raw: patch.raw !== undefined ? patch.raw : frontmatterChanged ? null : this.raw,
       aux: patch.aux ?? this.aux,
     })
   }

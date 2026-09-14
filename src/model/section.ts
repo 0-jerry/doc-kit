@@ -17,6 +17,10 @@ export interface SectionInit {
   /** 제목의 깊이(`##` 은 2). */
   readonly depth: number
   readonly children?: readonly Child[]
+  /** 제목 줄이 차지한 원문 조각. 자식의 조각은 포함하지 않는다. */
+  readonly raw?: string | null
+  /** 제목 앞에 붙은 디렉티브 주석의 원문 조각. 보조데이터가 바뀌면 버린다. */
+  readonly directiveRaw?: string | null
   readonly aux?: Aux
   readonly stableId?: string | null
 }
@@ -27,6 +31,8 @@ export class Section extends NodeBase implements Branch {
   readonly heading: string
   readonly depth: number
   readonly children: readonly Child[]
+  readonly raw: string | null
+  readonly directiveRaw: string | null
 
   constructor(init: SectionInit) {
     super(init.aux ?? EMPTY_AUX, init.stableId ?? null)
@@ -34,6 +40,8 @@ export class Section extends NodeBase implements Branch {
     this.heading = init.heading
     this.depth = init.depth
     this.children = init.children ?? []
+    this.raw = init.raw ?? null
+    this.directiveRaw = init.directiveRaw ?? null
   }
 
   get sections(): readonly Section[] {
@@ -44,12 +52,22 @@ export class Section extends NodeBase implements Branch {
     return this.children.filter((child): child is Block => child.kind === 'block')
   }
 
+  /** 자식이 바뀌어도 제목 조각은 유효하므로 그대로 둔다. */
   with(patch: Partial<SectionInit>): Section {
+    const headingChanged = patch.heading !== undefined || patch.depth !== undefined
+    const auxChanged = patch.aux !== undefined || patch.stableId !== undefined
     return new Section({
       key: patch.key ?? this.key,
       heading: patch.heading ?? this.heading,
       depth: patch.depth ?? this.depth,
       children: patch.children ?? this.children,
+      raw: patch.raw !== undefined ? patch.raw : headingChanged ? null : this.raw,
+      directiveRaw:
+        patch.directiveRaw !== undefined
+          ? patch.directiveRaw
+          : auxChanged
+            ? null
+            : this.directiveRaw,
       aux: patch.aux ?? this.aux,
       stableId: patch.stableId === undefined ? this.stableId : patch.stableId,
     })
