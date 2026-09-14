@@ -8,6 +8,7 @@ import { buildGraph, toDot, toMermaid } from './graph.js'
 import { buildIndex } from './index-build.js'
 import { importGuide } from './import.js'
 import { importDocTree } from './import-doc-tree.js'
+import { renderSite } from './render/index.js'
 import { validateRuleSet } from './validate.js'
 import type { RuleSet } from './types.js'
 
@@ -16,6 +17,8 @@ const USAGE = `rulekit — 프로젝트 규칙을 구조화·검증·탐색합�
 사용법:
   rulekit lint  [rules-dir] [--json] [--quiet] [--max-sentences <n>]
   rulekit build [rules-dir] [-o <out-dir>] [--format json|mermaid|dot]
+  rulekit render [rules-dir] [-o <out-dir>] [--site-title <name>]
+                 [--source-base <url>] [--inline-assets]
   rulekit import <guide.md> [-o <rules-dir>] [--source-link <path>] [--dry-run]
   rulekit import <docs-dir> --profile doc-tree [-o <rules-dir>]
                  [--registry <documents.tsv>] [--scopes <scopes.tsv>]
@@ -25,6 +28,7 @@ const USAGE = `rulekit — 프로젝트 규칙을 구조화·검증·탐색합�
   lint    frontmatter 스키마 · 본문 구조 · 규칙 간 참조 무결성을 검사합니다.
   build   lint 를 통과한 규칙으로 인덱스(rules.index.json)와
           그래프(rules.graph.json)를 생성합니다.
+  render  lint 를 통과한 규칙을 정적 HTML 사이트로 렌더합니다.
   import  기존 규칙 문서를 규칙 파일 트리로 정규화합니다.
           --profile anchor-list (기본) 단일 파일 가이드를 분해
           --profile doc-tree           이미 쪼개진 문서 트리를 정규화
@@ -44,6 +48,9 @@ const USAGE = `rulekit — 프로젝트 규칙을 구조화·검증·탐색합�
       --doc-base        doc-tree: 수입하지 않은 문서를 가리키는 링크의 접두사
                         (생략하면 생성 파일에서 원문까지의 상대 경로)
       --severity        doc-tree: 부여할 심각도 (기본 error)
+      --site-title      render: 사이트 제목 (기본: 규칙집)
+      --source-base     render: 원문 마크다운 링크 접두사 (예: GitHub blob URL)
+      --inline-assets   render: CSS·JS 를 각 문서에 인라인
       --source-link     import 시 ## References 에 남길 원문 경로
       --dry-run         import 결과를 파일로 쓰지 않고 요약만 출력
   -h, --help            이 도움말
@@ -149,6 +156,42 @@ async function cmdBuild(dir: string, opts: Record<string, unknown>): Promise<num
   if (graph.cycles.length > 0) {
     console.error(`  경고: extends 순환 ${graph.cycles.length}건`)
   }
+  return 0
+}
+
+async function cmdRender(dir: string, opts: Record<string, unknown>): Promise<number> {
+  const set = await loadRules(dir, opts['max-sentences'] as number | undefined)
+  const counts = countMessages(set)
+  const failed = counts.errors > 0 || (!!opts.strict && counts.warnings > 0)
+  if (failed) {
+    console.error(reporter(set.files, { quiet: !opts.strict }))
+    console.error(
+      `\n오류 ${counts.errors}건 · 경고 ${counts.warnings}건 때문에 렌더를 중단했습니다.`,
+    )
+    return 1
+  }
+
+  const files = renderSite(set, {
+    title: opts['site-title'] as string | undefined,
+    sourceBase: opts['source-base'] as string | undefined,
+    inlineAssets: !!opts['inline-assets'],
+  })
+
+  const out = path.resolve((opts.out as string | undefined) ?? '.rulekit/site')
+  if (opts['dry-run']) {
+    for (const file of files) console.error(`  ${file.path}`)
+    console.error(`\n${files.length}개 파일 (dry-run)`)
+    return 0
+  }
+
+  for (const file of files) {
+    const target = path.join(out, file.path)
+    await fs.mkdir(path.dirname(target), { recursive: true })
+    await fs.writeFile(target, file.content)
+  }
+  console.error(
+    `규칙 ${set.rules.length}개 → ${path.relative(process.cwd(), out)}/ (파일 ${files.length}개)`,
+  )
   return 0
 }
 
@@ -266,6 +309,9 @@ async function main(): Promise<number> {
       kinds: { type: 'string' },
       'repo-root': { type: 'string' },
       'doc-base': { type: 'string' },
+      'site-title': { type: 'string' },
+      'source-base': { type: 'string' },
+      'inline-assets': { type: 'boolean', default: false },
       severity: { type: 'string' },
       'max-sentences': { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
@@ -291,6 +337,8 @@ async function main(): Promise<number> {
       return cmdLint(dir, opts)
     case 'build':
       return cmdBuild(dir, opts)
+    case 'render':
+      return cmdRender(dir, opts)
     case 'import':
       if (!dirArg) {
         console.error('import 에는 원본 가이드 파일 경로가 필요합니다\n')
