@@ -1,0 +1,4 @@
+node_modules
+dist
+.rulekit
+.DS_Store
