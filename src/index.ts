@@ -8,6 +8,16 @@ export { createProcessor } from './processor.js'
 export type { ProcessorOptions } from './processor.js'
 export { ruleExtract } from './plugins/rule-extract.js'
 export { ruleLint } from './plugins/rule-lint.js'
+export {
+  createContext,
+  renderCategoryPage,
+  renderContent,
+  renderIndexPage,
+  renderRuleDocument,
+  renderRulePage,
+  renderSite,
+} from './render/index.js'
+export type { RenderOptions, RenderedFile, SiteContext } from './render/index.js'
 export { frontmatterSchema, SECTION_SPEC } from './schema.js'
 export type * from './types.js'
 export { findCycles, validateRuleSet } from './validate.js'
