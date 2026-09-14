@@ -84,6 +84,11 @@ export const vocabularySchema = z
     ordered: z.boolean().default(false),
     /** 외부 목록 파일 경로. 로더가 읽어 `values` 에 합친다. */
     source: z.string().min(1).optional(),
+    /**
+     * 값 → 파일 경로 글롭. 어떤 파일이 어떤 대상인지는 어휘가 소유한다 —
+     * 도구는 프로젝트의 경로 규칙을 모른다.
+     */
+    paths: z.record(z.string().min(1), z.array(z.string().min(1))).default({}),
   })
   .strict()
 

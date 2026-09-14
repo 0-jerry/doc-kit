@@ -25,3 +25,7 @@ export * from './validate/index.js'
 
 // L3 조작 프로토콜
 export * from './api/index.js'
+
+// 문서 간 인덱스와 질의
+export * from './workspace/index.js'
+export * from './query/index.js'

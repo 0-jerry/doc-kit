@@ -135,6 +135,16 @@ export class Schema {
     return rank === -1 ? null : rank
   }
 
+  /** 어휘 값에 딸린 경로 글롭. 도구는 이 매핑을 해석만 하고 만들지 않는다. */
+  pathsOf(name: VocabularyName, value: string): readonly string[] {
+    return this.vocabulary(name)?.paths[value] ?? []
+  }
+
+  /** 경로 매핑을 가진 값들. */
+  valuesWithPaths(name: VocabularyName): readonly string[] {
+    return Object.keys(this.vocabulary(name)?.paths ?? {})
+  }
+
   relation(kind: string): RelationSpec | null {
     return this.declaration.relations[kind] ?? null
   }

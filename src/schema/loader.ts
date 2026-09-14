@@ -140,6 +140,10 @@ function fileResolver(reference: string, from: string): ResolvedBase | null {
 /**
  * 외부 목록 파일을 읽어 어휘에 합친다.
  * 어휘가 값을 어디에 두든 규약의 질의 결과는 같아야 하므로 여기서 흡수한다.
+ *
+ * 파일은 두 모양을 받는다.
+ *   - 문자열 배열 → 값 목록
+ *   - 매핑 `{ 값: [경로 글롭…] }` → 값 목록 + 경로 매핑
  */
 function absorbVocabularySources(declaration: Declaration, schemaPath: string): Declaration {
   const directory = dirname(schemaPath)
@@ -148,10 +152,34 @@ function absorbVocabularySources(declaration: Declaration, schemaPath: string): 
       if (spec.source === undefined) return [name, spec]
       const path = isAbsolute(spec.source) ? spec.source : resolvePath(directory, spec.source)
       const loaded = readYamlFile(path)
-      if (!Array.isArray(loaded) || loaded.some((value) => typeof value !== 'string')) {
-        throw new SchemaError(`어휘 목록은 문자열 배열이어야 합니다 (${name})`, path)
+
+      if (Array.isArray(loaded)) {
+        if (loaded.some((value) => typeof value !== 'string')) {
+          throw new SchemaError(`어휘 목록은 문자열 배열이어야 합니다 (${name})`, path)
+        }
+        return [name, { ...spec, values: [...new Set([...spec.values, ...(loaded as string[])])] }]
       }
-      return [name, { ...spec, values: [...new Set([...spec.values, ...(loaded as string[])])] }]
+
+      if (typeof loaded === 'object' && loaded !== null) {
+        const entries = Object.entries(loaded as Record<string, unknown>)
+        const paths: Record<string, string[]> = { ...spec.paths }
+        for (const [value, globs] of entries) {
+          if (!Array.isArray(globs) || globs.some((glob) => typeof glob !== 'string')) {
+            throw new SchemaError(`'${value}' 의 경로 목록은 문자열 배열이어야 합니다`, path)
+          }
+          paths[value] = [...new Set([...(paths[value] ?? []), ...(globs as string[])])]
+        }
+        return [
+          name,
+          {
+            ...spec,
+            values: [...new Set([...spec.values, ...entries.map(([value]) => value)])],
+            paths,
+          },
+        ]
+      }
+
+      throw new SchemaError(`어휘 파일은 목록이거나 매핑이어야 합니다 (${name})`, path)
     }),
   )
   return { ...declaration, vocabularies }
