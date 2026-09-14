@@ -1,0 +1,26 @@
+# rule-kit 자신의 저작 규약. 도구에 특별 취급되는 문법은 없다 —
+# 내장 프리셋도 이것과 같은 형식이고 같은 로더를 탄다.
+version: 1
+extends:
+  - preset/principle
+  - preset/convention
+
+collections:
+  principle: principle
+  convention: convention
+
+vocabularies:
+  subject:
+    description: 이 판단기준이 적용되는 곳.
+    closed: true
+    source: ./subjects.yaml
+  topic:
+    closed: false
+  status:
+    closed: true
+    ordered: true
+    values: [active, proposed, deprecated, superseded]
+  level:
+    closed: true
+    ordered: true
+    values: [must, should, may]

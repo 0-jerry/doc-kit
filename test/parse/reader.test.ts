@@ -127,3 +127,9 @@ test('공백을 담은 값은 목록 표기로 써야 다시 읽힌다', () => {
     { key: 'status', values: ['외부 API'], isList: true },
   ])
 })
+
+test('안정 식별자에 주소 구분자가 섞이면 오류다', () => {
+  const result = read(`${HEAD}## 기준\n\n<!-- rk: id=a#b -->\n진술.\n`)
+  assert.ok(codes(result).includes('PRS004'))
+  assert.equal(result.document?.sections[0]?.blocks[0]?.stableId, null)
+})

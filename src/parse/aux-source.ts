@@ -3,7 +3,13 @@
  * frontmatter 와 디렉티브가 같은 경로를 타므로 두 채널의 의미가 갈라지지 않는다.
  */
 
-import { type Aux, type Lifecycle, type Relation, aux as makeAux } from '../model/index.js'
+import {
+  type Aux,
+  type Lifecycle,
+  type Relation,
+  aux as makeAux,
+  isWellFormedSegment,
+} from '../model/index.js'
 import type { Schema } from '../schema/index.js'
 import type { DirectiveEntry } from './directive.js'
 
@@ -71,8 +77,16 @@ export function buildAux(entries: readonly DirectiveEntry[], schema: Schema): Au
         problems.push(`${entry.key}: 값이 필요합니다`)
         continue
       }
-      if (entry.key === 'id') stableId = first
-      else reserved.set(entry.key, first)
+      if (entry.key === 'id') {
+        // 식별자는 주소의 한 조각이 된다. 구분자가 섞이면 주소를 읽을 수 없게 된다.
+        if (!isWellFormedSegment(first)) {
+          problems.push(`id 에 주소 문법과 충돌하는 문자가 있습니다: ${first}`)
+          continue
+        }
+        stableId = first
+      } else {
+        reserved.set(entry.key, first)
+      }
       continue
     }
 

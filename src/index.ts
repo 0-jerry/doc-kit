@@ -29,3 +29,6 @@ export * from './api/index.js'
 // 문서 간 인덱스와 질의
 export * from './workspace/index.js'
 export * from './query/index.js'
+
+// 사람용 출력
+export * from './render/index.js'
