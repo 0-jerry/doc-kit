@@ -23,7 +23,8 @@ const POLARITY = /^\s*(?:\/\/|#|--|\/\*)\s*(WRONG|BAD|RIGHT|GOOD|OK)\b/i
 const kindOf = (word: string): 'right' | 'wrong' =>
   /wrong|bad/i.test(word) ? 'wrong' : 'right'
 
-function polarityOf(value: string): CodeBlock['polarity'] {
+/** 코드 블록 첫 줄 주석에서 예시 극성을 읽는다. 렌더러도 같은 판정을 쓴다. */
+export function polarityOf(value: string): CodeBlock['polarity'] {
   const first = value.split('\n', 1)[0] ?? ''
   const m = POLARITY.exec(first)
   return m ? kindOf(m[1]!) : null
@@ -74,6 +75,7 @@ export function splitSections(tree: Root): RuleSection[] {
       heading: heading ? toString(heading) : '',
       depth: heading?.depth ?? 0,
       text: toString(body).trim(),
+      content: nodes,
       codeBlocks,
       listItems,
     })

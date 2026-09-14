@@ -1,4 +1,4 @@
-import type { Root } from 'mdast'
+import type { Root, RootContent } from 'mdast'
 import type { VFile } from 'vfile'
 
 /** 규칙의 강제 수준. lint 결과의 심각도로 그대로 매핑된다. */
@@ -51,6 +51,8 @@ export interface RuleSection {
   depth: number
   /** 서식을 제거한 평문. 검색/요약에 사용한다. */
   text: string
+  /** 제목을 뺀 섹션 본문의 mdast 노드. 렌더러가 서식을 살려 쓰는 원본이다. */
+  content: RootContent[]
   codeBlocks: CodeBlock[]
   /** 최상위 목록 항목 수. 열거형 규범 진술의 크기를 재는 데 쓴다. */
   listItems: number
