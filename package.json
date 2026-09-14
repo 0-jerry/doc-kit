@@ -4,12 +4,24 @@
   "description": "프로젝트 규칙을 unified/mdast 기반으로 구조화·검증·탐색하는 도구",
   "type": "module",
   "license": "MIT",
-  "bin": { "rulekit": "./dist/cli.js" },
+  "bin": {
+    "rulekit": "./dist/cli.js"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "files": ["dist", "README.md"],
-  "engines": { "node": ">=20.11" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint:rules": "tsx src/cli.ts lint rules",
@@ -18,6 +30,8 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "hast-util-to-html": "^9.0.5",
+    "mdast-util-to-hast": "^13.2.1",
     "mdast-util-to-string": "^4.0.0",
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.0",
