@@ -14,6 +14,7 @@ import { unified } from 'unified'
 import { parse as parseYaml } from 'yaml'
 import { type Diagnostic, diagnostic } from '../diagnostic/index.js'
 import {
+  type Aux,
   Block,
   type BlockForm,
   type Child,
@@ -29,14 +30,42 @@ import { type DirectiveEntry, isDirective, parseDirective } from './directive.js
 
 const processor = unified().use(remarkParse).use(remarkFrontmatter, ['yaml']).use(remarkGfm)
 
-export interface ParseOptions {
+export interface SourceOptions {
   readonly schema: Schema
   /** 저장소 루트 기준 경로. 진단에 쓴다. */
   readonly path: string
-  /** 디렉터리 이름. 문서 타입을 정하는 데 쓴다. */
+  /**
+   * 문서 타입. 이미 아는 경우에 준다 — 노드 파일은 타입을 다시 적지 않는다.
+   * 주지 않으면 frontmatter 의 `type` 이나 컬렉션에서 정한다.
+   */
+  readonly type?: string
+  /** 디렉터리 이름. 타입을 정하는 데 쓴다. `type` 을 주면 필요 없다. */
+  readonly collection?: string
+  /**
+   * 제목에서 만들어지는 섹션의 시작 깊이. 노드 파일은 자기 깊이를 모르므로
+   * 조립기가 정해 준다. 기본은 원문의 `#` 개수를 그대로 쓴다.
+   */
+  readonly depthOffset?: number
+}
+
+export interface ParseOptions extends SourceOptions {
   readonly collection: string
   /** 확장자를 뗀 파일 이름. `id` 가 없으면 이것이 문서 식별자가 된다. */
   readonly name: string
+}
+
+/** 파일 하나를 읽은 결과. 문서 정체성은 담지 않는다. */
+export interface SourceParse {
+  readonly type: string
+  readonly aux: Aux
+  /** frontmatter 의 `id`. 문서에서는 문서 이름, 노드 파일에서는 안정 식별자다. */
+  readonly stableId: string | null
+  readonly reserved: ReadonlyMap<string, readonly string[]>
+  readonly children: readonly Child[]
+  /** frontmatter 가 차지한 원문 조각. */
+  readonly raw: string
+  readonly sourceLength: number
+  readonly diagnostics: readonly Diagnostic[]
 }
 
 export interface ParseResult {
@@ -115,8 +144,12 @@ export function parseBlockSource(
   return { form: formOf(node), text: mdastToString(node), source: node }
 }
 
-export function parseDocument(text: string, options: ParseOptions): ParseResult {
-  const { schema, path, collection, name } = options
+/**
+ * 파일 하나를 frontmatter 와 노드들로 읽는다.
+ * 문서 정체성(컬렉션·이름)은 모르며, 그것은 `parseDocument` 가 얹는다.
+ */
+export function parseSource(text: string, options: SourceOptions): SourceParse | null {
+  const { schema, path } = options
   const diagnostics: Diagnostic[] = []
   const report = (
     code: string,
@@ -192,7 +225,7 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
       parsed = parseYaml(frontmatterNode.value)
     } catch (error) {
       report('PRS002', 'error', `frontmatter 를 읽을 수 없습니다: ${(error as Error).message}`, 1)
-      return { document: null, diagnostics }
+      return null
     }
     const converted = entriesFromObject(parsed ?? {})
     documentEntries = converted.entries
@@ -202,10 +235,11 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
   const documentAux = buildAux(documentEntries, schema)
   for (const problem of documentAux.problems) report('PRS003', 'error', problem, 1)
 
-  const declaredType = documentAux.reserved.get('type')
-  const collectionType = schema.typeForCollection(collection)
-  const type = declaredType ?? collectionType ?? collection
-  if (declaredType === undefined && collectionType === null) {
+  const declaredType = documentAux.reserved.get('type')?.[0]
+  const collection = options.collection ?? ''
+  const collectionType = collection === '' ? null : schema.typeForCollection(collection)
+  const type = options.type ?? declaredType ?? collectionType ?? collection
+  if (options.type === undefined && declaredType === undefined && collectionType === null) {
     report(
       'PRS007',
       'error',
@@ -213,14 +247,6 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
       1,
       `frontmatter 에 type 을 적거나 규약의 collections 에 '${collection}' 을 더하세요`,
     )
-  }
-
-  let id: string
-  try {
-    id = formatDocumentId(collection, documentAux.stableId ?? name)
-  } catch (error) {
-    report('PRS008', 'error', (error as Error).message, 1)
-    return { document: null, diagnostics }
   }
 
   // ── 트리 세우기 ─────────────────────────────────────────────────────────
@@ -248,7 +274,8 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
     if (node.type === 'heading') {
       const headingNode = node as Heading
       const headingText = mdastToString(headingNode)
-      while (stack.length > 0 && stack[stack.length - 1]!.depth >= headingNode.depth) stack.pop()
+      const depth = headingNode.depth + (options.depthOffset ?? 0)
+      while (stack.length > 0 && stack[stack.length - 1]!.depth >= depth) stack.pop()
 
       const mapped = schema.sectionPathForHeading(type, headingText)
       const key = mapped === null ? slugify(headingText) : mapped[mapped.length - 1]!
@@ -265,12 +292,12 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
       const builder: Builder = {
         key,
         heading: headingText,
-        depth: headingNode.depth,
+        depth,
         children: [],
         section: {
           key,
           heading: headingText,
-          depth: headingNode.depth,
+          depth,
           line: line ?? null,
           aux: declared.aux,
           stableId: declared.stableId,
@@ -306,16 +333,66 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
     else parent.children.push(block)
   })
 
-  const document = new Document({
-    id,
+  return {
     type,
-    path,
-    raw: documentRaw,
-    origin: { start: 0, end: documentRaw.length },
-    sourceLength: text.length,
     aux: documentAux.aux,
+    stableId: documentAux.stableId,
+    reserved: documentAux.reserved,
     children: roots.map((child) => (child instanceof Block ? child : toSection(child))),
-  })
+    raw: documentRaw,
+    sourceLength: text.length,
+    diagnostics,
+  }
+}
 
-  return { document, diagnostics }
+/** 파일 하나를 문서로 읽는다. 컬렉션과 이름이 문서 식별자가 된다. */
+export function parseDocument(text: string, options: ParseOptions): ParseResult {
+  const source = parseSource(text, options)
+  if (source === null) {
+    return {
+      document: null,
+      diagnostics: [
+        diagnostic({
+          code: 'PRS002',
+          severity: 'error',
+          message: 'frontmatter 를 읽을 수 없습니다',
+          path: options.path,
+          line: 1,
+        }),
+      ],
+    }
+  }
+
+  let id: string
+  try {
+    id = formatDocumentId(options.collection, source.stableId ?? options.name)
+  } catch (error) {
+    return {
+      document: null,
+      diagnostics: [
+        ...source.diagnostics,
+        diagnostic({
+          code: 'PRS008',
+          severity: 'error',
+          message: (error as Error).message,
+          path: options.path,
+          line: 1,
+        }),
+      ],
+    }
+  }
+
+  return {
+    document: new Document({
+      id,
+      type: source.type,
+      path: options.path,
+      raw: source.raw,
+      origin: { start: 0, end: source.raw.length },
+      sourceLength: source.sourceLength,
+      aux: source.aux,
+      children: source.children,
+    }),
+    diagnostics: source.diagnostics,
+  }
 }

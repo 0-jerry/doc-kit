@@ -13,16 +13,23 @@ import {
 import type { Schema } from '../schema/index.js'
 import type { DirectiveEntry } from './directive.js'
 
-/** 보조데이터가 아니라 노드 자체를 가리키는 키들. */
-const RESERVED = new Set(['id', 'type'])
+/**
+ * 보조데이터가 아니라 노드 자체를 가리키는 키들.
+ *
+ * - `id` 노드의 안정 식별자 (문서에서는 문서 이름)
+ * - `type` 문서 타입
+ * - `title` 노드의 제목. 노드 파일에는 제목 줄이 없으므로 여기에 적는다
+ * - `children` 하위 노드 인덱스. 순서가 곧 문서 순서다
+ */
+const RESERVED = new Set(['id', 'type', 'title', 'children'])
 
 const LIFECYCLE_KEYS = new Set(['status', 'since', 'until', 'level'])
 
 export interface AuxSourceResult {
   readonly aux: Aux
   readonly stableId: string | null
-  /** `type` 처럼 보조데이터가 아닌 값들. */
-  readonly reserved: ReadonlyMap<string, string>
+  /** `type` `children` 처럼 보조데이터가 아닌 값들. */
+  readonly reserved: ReadonlyMap<string, readonly string[]>
   readonly problems: readonly string[]
 }
 
@@ -61,7 +68,7 @@ export function entriesFromObject(value: unknown): {
  */
 export function buildAux(entries: readonly DirectiveEntry[], schema: Schema): AuxSourceResult {
   const problems: string[] = []
-  const reserved = new Map<string, string>()
+  const reserved = new Map<string, readonly string[]>()
   const subject: string[] = []
   const topic: string[] = []
   const relations: Relation[] = []
@@ -73,6 +80,11 @@ export function buildAux(entries: readonly DirectiveEntry[], schema: Schema): Au
     const first = entry.values[0]
 
     if (RESERVED.has(entry.key)) {
+      if (entry.key === 'children') {
+        // 비어 있는 인덱스는 "자식이 없다"는 뜻이므로 값이 없어도 된다.
+        reserved.set('children', entry.values)
+        continue
+      }
       if (first === undefined) {
         problems.push(`${entry.key}: 값이 필요합니다`)
         continue
@@ -85,7 +97,7 @@ export function buildAux(entries: readonly DirectiveEntry[], schema: Schema): Au
         }
         stableId = first
       } else {
-        reserved.set(entry.key, first)
+        reserved.set(entry.key, [first])
       }
       continue
     }

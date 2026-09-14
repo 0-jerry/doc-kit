@@ -54,11 +54,9 @@ function entriesOf(aux: Aux, stableId: string | null, skipRole: boolean): Direct
   return entries
 }
 
-function renderFrontmatter(document: Document): string {
-  const parsed = parseDocumentId(document.id)
-  const aux = document.aux
-  const body: Record<string, unknown> = { type: document.type }
-  if (parsed !== null) body['id'] = parsed.name
+/** 보조데이터를 frontmatter 본문에 얹는다. 노드 파일도 같은 표현을 쓴다. */
+export function writeAuxTo(body: Record<string, unknown>, aux: Aux): Record<string, unknown> {
+  if (aux.role !== undefined) body['role'] = aux.role
   if (aux.subject.length > 0) body['subject'] = [...aux.subject]
   if (aux.topic.length > 0) body['topic'] = [...aux.topic]
   for (const key of LIFECYCLE_ORDER) {
@@ -70,7 +68,23 @@ function renderFrontmatter(document: Document): string {
       .filter((relation) => relation.kind === kind)
       .map((relation) => relation.target)
   }
-  return `---\n${stringifyYaml(body)}---\n\n`
+  return body
+}
+
+/**
+ * frontmatter 블록 하나를 만든다. 뒤에 빈 줄 하나가 따른다.
+ * 적을 것이 없으면 빈 블록을 낸다 — YAML 의 `{}` 는 사람이 읽을 것이 아니다.
+ */
+export function renderFrontmatterBlock(body: Record<string, unknown>): string {
+  const yaml = Object.keys(body).length === 0 ? '' : stringifyYaml(body)
+  return `---\n${yaml}---\n\n`
+}
+
+function renderFrontmatter(document: Document): string {
+  const parsed = parseDocumentId(document.id)
+  const body: Record<string, unknown> = { type: document.type }
+  if (parsed !== null) body['id'] = parsed.name
+  return renderFrontmatterBlock(writeAuxTo(body, document.aux))
 }
 
 function renderBody(node: Child): string {

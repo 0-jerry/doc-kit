@@ -8,7 +8,8 @@ import type { Document } from '../model/index.js'
 import { parseDocument } from '../parse/index.js'
 import type { Schema } from '../schema/index.js'
 import { validateDocument } from '../validate/index.js'
-import { type SourceFile, collectSources } from './collect.js'
+import { type NodeFiles, nodeFilesAt, readNodeTree } from '../nodes/index.js'
+import { type DocumentSource, collectSources } from './collect.js'
 import { type RelationGraph, buildGraph } from './graph.js'
 import { type NodeRecord, recordsOf } from './record.js'
 
@@ -84,23 +85,34 @@ export interface BuildOptions {
   readonly schema: Schema
   /** 원칙 검사도 함께 돌릴지. 기본은 돈다. */
   readonly validate?: boolean
+  /** 노드 트리를 읽어 오는 방법. 생략하면 루트 아래의 실제 파일을 읽는다. */
+  readonly files?: NodeFiles
 }
 
-/** 이미 읽어 온 원문들로 작업공간을 세운다. */
+/** 모아 온 문서들로 작업공간을 세운다. */
 export function buildWorkspace(
-  sources: readonly SourceFile[],
+  sources: readonly DocumentSource[],
   options: BuildOptions,
 ): Workspace {
   const entries: WorkspaceEntry[] = []
   const diagnostics: Diagnostic[] = []
+  const files = options.files ?? nodeFilesAt(options.root)
 
   for (const source of sources) {
-    const result = parseDocument(source.text, {
-      schema: options.schema,
-      path: source.path,
-      collection: source.collection,
-      name: source.name,
-    })
+    const result =
+      source.kind === 'tree'
+        ? readNodeTree({
+            schema: options.schema,
+            collection: source.collection,
+            name: source.name,
+            files,
+          })
+        : parseDocument(source.text, {
+            schema: options.schema,
+            path: source.path,
+            collection: source.collection,
+            name: source.name,
+          })
     diagnostics.push(...result.diagnostics)
     if (result.document === null) continue
 

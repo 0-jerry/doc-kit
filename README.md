@@ -22,6 +22,49 @@ npx rulekit check rules
 
 ## 저작 형식
 
+노드 하나가 디렉터리 하나다. 제목이 노드를 만들고, `#` 개수가 계층이다.
+
+```
+rules/principle/불변식은-생성자에서-검증한다/
+  node.md                  ← 문서이자 루트 노드
+  norm/node.md
+  rationale/node.md
+  rationale/더-좁은-경우/node.md
+  example/node.md
+```
+
+노드는 객체처럼 **자기가 정의한 내용**과 **하위 노드 인덱스**만 소유한다.
+부모는 자식의 내용을 갖지 않는다 — 이름만 들고 있고, 합칠 때 그 인덱스를 따라 주입한다.
+
+```markdown
+<!-- principle/불변식은-생성자에서-검증한다/node.md -->
+---
+type: principle
+id: 불변식은-생성자에서-검증한다
+subject: [domain-layer]
+status: active
+children: [norm, rationale, example]    ← 하위 노드 인덱스. 순서가 곧 문서 순서
+---
+```
+
+```markdown
+<!-- principle/불변식은-생성자에서-검증한다/norm/node.md -->
+---
+---
+
+<!-- rk: id=core -->
+객체의 불변식은 생성자에서 검증하고, 검증에 실패하면 인스턴스를 만들지 않는다.
+```
+
+노드 파일에는 제목 줄이 없다. 이름은 디렉터리가, 제목은 규약이 안다 —
+규약에 없는 제목만 frontmatter 의 `title` 로 적는다. 섹션이 정한 기본 역할도 적지 않고,
+읽을 때 그 자리에서 되살린다.
+
+`rulekit split` 이 한 파일짜리 문서를 이 형태로 흩고, `rulekit assemble` 이 도로 합친다.
+한 파일에 담긴 `<컬렉션>/<문서>.md` 형식도 그대로 읽는다.
+
+### 한 파일에 담는 형식
+
 `<루트>/<컬렉션>/<문서>.md` — 디렉터리가 컬렉션, 파일명이 문서 식별자다.
 
 ```markdown
@@ -108,6 +151,8 @@ parse: ['src/parse/**', 'src/serialize/**']
 | 안정 주소는 한 노드만 가리킨다 | 오류 | `AUX004` |
 | 내용 복제 대신 관계 링크를 쓴다 | 경고 | `REF001` |
 | 참조는 존재하고 비순환이어야 한다 | 오류 | `REF002`·`REF003` |
+| 인덱스는 디렉터리 하나만 가리킨다 | 오류 | `NODE002`·`NODE005`·`NODE006` |
+| 제목은 노드 파일이 아니라 디렉터리로 나뉜다 | 경고 | `NODE004` |
 
 ## CLI
 
@@ -118,6 +163,11 @@ rulekit query   [루트] --role norm --subject …   조건에 맞는 규범 진
 rulekit context <파일경로> --root <루트>         그 파일에 적용되는 판단기준
 rulekit render  [루트] --out <디렉터리>          정적 규칙집
 rulekit apply   [루트] --commands <파일|-> [--dry-run]
+
+rulekit split    [루트] --document <id> [--dry-run] [--replace]
+                                                 문서를 노드 디렉터리로 흩는다
+rulekit assemble [루트] --document <id> [--out <파일>]
+                                                 노드 트리를 한 파일로 합친다
 ```
 
 `check` 는 오류가 있으면 종료 코드 1 을 낸다. `--strict` 를 주면 경고도 실패로 본다.
@@ -156,7 +206,7 @@ rulekit context src/domain/Order.ts --root rules --json
 | L2 문서 객체 모델 | `src/model/` | `Document → Section → Block` 트리와 보조데이터. 아무것도 import 하지 않는다 |
 | L3 조작 프로토콜 | `src/api/` | JSON 명령 객체. 원본을 바꾸지 않고 파일도 쓰지 않는다 |
 
-나머지는 이 셋 위에 얹힌다 — `parse` `serialize` `validate` `workspace` `query` `render` `cli`.
+나머지는 이 셋 위에 얹힌다 — `parse` `serialize` `nodes` `validate` `workspace` `query` `render` `cli`.
 설계 근거와 트레이드오프는 [docs/design/0001-재설계.md](docs/design/0001-재설계.md) 에 있다.
 
 ## 개발

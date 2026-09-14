@@ -17,7 +17,7 @@ const schema = loadSchema({
 })
 
 function source(name: string, text: string): SourceFile {
-  return { path: `principle/${name}.md`, collection: 'principle', name, text }
+  return { kind: 'file', path: `principle/${name}.md`, collection: 'principle', name, text }
 }
 
 const 불변식 = source(
@@ -168,7 +168,8 @@ test('REF004 — 짝이 맞아야 하는 관계가 한쪽만 걸리면 경고', 
 })
 
 test('REF005 — 문서 식별자가 겹치면 오류', () => {
-  const 같은id = {
+  const 같은id: SourceFile = {
+    kind: 'file',
     path: 'principle/다른파일.md',
     collection: 'principle',
     name: '다른파일',

@@ -1,9 +1,11 @@
 /** 디렉터리에서 문서를 모아 읽는다. 파싱도 검증도 하지 않고 파일만 찾는다. */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { NODE_FILE } from '../nodes/index.js'
 
 export interface SourceFile {
+  readonly kind: 'file'
   /** 루트 기준 상대 경로. */
   readonly path: string
   readonly collection: string
@@ -11,13 +13,26 @@ export interface SourceFile {
   readonly text: string
 }
 
+/** 노드 디렉터리로 흩어진 문서. 내용은 조립기가 읽는다. */
+export interface SourceTree {
+  readonly kind: 'tree'
+  readonly path: string
+  readonly collection: string
+  readonly name: string
+}
+
+export type DocumentSource = SourceFile | SourceTree
+
 /**
- * `<root>/<collection>/<name>.md` 를 모은다.
- * 컬렉션 디렉터리 안의 더 깊은 계층은 컬렉션 이름에 `/` 로 이어 붙이지 않는다 —
- * 컬렉션은 한 겹이고, 더 깊은 구조는 문서 안의 트리가 맡는다.
+ * 문서를 모은다. 두 저장 형태를 함께 받는다.
+ *
+ *   `<root>/<collection>/<name>.md`            한 파일에 담긴 문서
+ *   `<root>/<collection>/<name>/node.md`       노드 디렉터리로 흩어진 문서
+ *
+ * 컬렉션은 한 겹이다. 더 깊은 구조는 문서 안의 노드 트리가 맡는다.
  */
-export function collectSources(root: string): SourceFile[] {
-  const sources: SourceFile[] = []
+export function collectSources(root: string): DocumentSource[] {
+  const sources: DocumentSource[] = []
   let entries: string[]
   try {
     entries = readdirSync(root)
@@ -30,13 +45,28 @@ export function collectSources(root: string): SourceFile[] {
     const directory = join(root, collection)
     if (!statSync(directory).isDirectory()) continue
 
-    for (const file of readdirSync(directory).sort()) {
-      if (!file.endsWith('.md')) continue
-      const path = `${collection}/${file}`
+    for (const entry of readdirSync(directory).sort()) {
+      if (entry.startsWith('.')) continue
+      const full = join(directory, entry)
+
+      if (statSync(full).isDirectory()) {
+        if (!existsSync(join(full, NODE_FILE))) continue
+        sources.push({
+          kind: 'tree',
+          path: `${collection}/${entry}/${NODE_FILE}`,
+          collection,
+          name: entry,
+        })
+        continue
+      }
+
+      if (!entry.endsWith('.md')) continue
+      const path = `${collection}/${entry}`
       sources.push({
+        kind: 'file',
         path,
         collection,
-        name: file.slice(0, -'.md'.length),
+        name: entry.slice(0, -'.md'.length),
         text: readFileSync(join(root, path), 'utf8'),
       })
     }

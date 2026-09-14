@@ -234,15 +234,22 @@ export class FileNameMatchesId implements DocumentCheck {
 
   run(context: CheckContext): readonly Diagnostic[] {
     const { document } = context
-    const fileName = document.path.split('/').pop()?.replace(/\.md$/, '') ?? ''
+    const segments = document.path.split('/')
+    /*
+     * 식별자는 파일 이름이거나 그것을 담은 디렉터리 이름이어야 한다.
+     * 한 파일에 담긴 문서는 앞쪽이, 노드 디렉터리로 흩어진 문서는 뒤쪽이 정체성을 진다.
+     * 검사기는 저장 형태를 알 필요 없이 둘 중 하나만 맞으면 된다고 본다.
+     */
+    const fileName = (segments[segments.length - 1] ?? '').replace(/\.md$/, '')
+    const directoryName = segments[segments.length - 2] ?? ''
     const name = document.id.slice(document.id.indexOf('/') + 1)
-    if (fileName === '' || fileName === name) return []
+    if (fileName === '' || fileName === name || directoryName === name) return []
     return [
       context.report(
         this,
-        `파일 이름(${fileName})과 문서 식별자(${name})가 다릅니다`,
+        `이름(${fileName})과 문서 식별자(${name})가 다릅니다`,
         null,
-        `파일을 ${name}.md 로 바꾸거나 frontmatter 의 id 를 고치세요`,
+        `파일이나 담긴 디렉터리를 ${name} 로 바꾸거나 frontmatter 의 id 를 고치세요`,
       ),
     ]
   }
