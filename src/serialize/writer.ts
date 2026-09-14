@@ -98,28 +98,59 @@ function isDefaultRole(
   return schema.defaultRoleAt(document.type, path) === node.aux.role
 }
 
+/** 노드 하나가 내놓는 조각. `generated` 는 원문 조각이 아니라 새로 쓴 것임을 뜻한다. */
+interface Chunk {
+  readonly text: string
+  readonly generated: boolean
+}
+
 function serializeChildren(
   parent: Parent,
   path: readonly string[],
   document: Document,
   options: SerializeOptions,
-  out: string[],
+  out: Chunk[],
 ): void {
   for (const child of parent.children) {
     const childPath = child instanceof Section ? [...path, child.key] : path
-    const skipRole =
-      child instanceof Block && isDefaultRole(child, path, document, options.schema)
-    out.push(child.directiveRaw ?? renderDirective(child, skipRole))
-    out.push(child.raw ?? renderBody(child))
+    const skipRole = child instanceof Block && isDefaultRole(child, path, document, options.schema)
+    const directive = child.directiveRaw ?? renderDirective(child, skipRole)
+    out.push({ text: directive + (child.raw ?? renderBody(child)), generated: child.raw === null })
     if (child instanceof Section) {
       serializeChildren(child, childPath, document, options, out)
     }
   }
 }
 
+/**
+ * 조각들을 잇는다.
+ *
+ * 손대지 않은 이웃끼리는 원문의 간격을 그대로 둔다 — 그래야 왕복이 바이트 단위로 같다.
+ * 한쪽이라도 새로 쓴 것이면 빈 줄을 보장한다. 빈 줄 없이 이으면 두 블록이 하나로
+ * 읽혀 분리해 둔 책임이 사라지기 때문이다.
+ */
+function join(chunks: readonly Chunk[]): string {
+  let text = ''
+  let previous: Chunk | null = null
+
+  for (const chunk of chunks) {
+    if (chunk.text === '') continue
+    if (previous !== null && (previous.generated || chunk.generated) && !text.endsWith('\n\n')) {
+      text += text.endsWith('\n') ? '\n' : '\n\n'
+    }
+    text += chunk.text
+    previous = chunk
+  }
+
+  // 새로 쓴 조각으로 끝났으면 꼬리의 빈 줄을 한 줄로 줄인다.
+  return previous?.generated === true ? text.replace(/\n+$/, '\n') : text
+}
+
 /** 문서를 마크다운 문자열로 되돌린다. */
 export function serializeDocument(document: Document, options: SerializeOptions = {}): string {
-  const out: string[] = [document.raw ?? renderFrontmatter(document)]
-  serializeChildren(document, [], document, options, out)
-  return out.join('')
+  const chunks: Chunk[] = [
+    { text: document.raw ?? renderFrontmatter(document), generated: document.raw === null },
+  ]
+  serializeChildren(document, [], document, options, chunks)
+  return join(chunks)
 }

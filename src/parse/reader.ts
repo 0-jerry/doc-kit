@@ -101,6 +101,20 @@ function toSection(builder: Builder): Section {
   })
 }
 
+/**
+ * 마크다운 조각 하나를 블록 재료로 읽는다. 조작 명령이 새 블록을 만들 때 쓴다.
+ * 블록이 정확히 하나가 아니면 null — 명령 하나가 여러 블록을 만들지 못하게 한다.
+ */
+export function parseBlockSource(
+  markdown: string,
+): { form: BlockForm; text: string; source: RootContent } | null {
+  const tree = processor.parse(markdown) as Root
+  const nodes = tree.children.filter((node) => node.type !== 'yaml')
+  const node = nodes.length === 1 ? nodes[0] : undefined
+  if (node === undefined) return null
+  return { form: formOf(node), text: mdastToString(node), source: node }
+}
+
 export function parseDocument(text: string, options: ParseOptions): ParseResult {
   const { schema, path, collection, name } = options
   const diagnostics: Diagnostic[] = []
