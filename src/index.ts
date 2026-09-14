@@ -8,7 +8,7 @@
 export const VERSION = '0.2.0-alpha.0'
 
 // L2 문서 객체 모델
-// export * from './model/index.js'
+export * from './model/index.js'
 
 // L1 저작 규약
 // export * from './schema/index.js'
