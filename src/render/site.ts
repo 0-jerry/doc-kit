@@ -65,12 +65,12 @@ function listOf(records: readonly NodeRecord[], depth: number): string {
   const norms = records.filter((record) => record.role === 'norm')
   return `<ul class="list">${norms
     .map(
-      (record) =>
-        `<li><a href="${documentLink(record.document, depth)}#${escapeHtml(
-          record.stableId ?? '',
-        )}">${escapeHtml(record.text)}</a><div class="dim">${escapeHtml(
-          record.document,
-        )}</div></li>`,
+      (record) => {
+        const anchor = record.stableId === null ? '' : `#${escapeHtml(record.stableId)}`
+        return `<li><a href="${documentLink(record.document, depth)}${anchor}">${escapeHtml(
+          record.text,
+        )}</a><div class="dim">${escapeHtml(record.document)}</div></li>`
+      },
     )
     .join('')}</ul>`
 }

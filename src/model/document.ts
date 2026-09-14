@@ -4,7 +4,6 @@
  */
 
 import { type Aux, EMPTY_AUX, resolveAux } from './aux.js'
-import type { Block } from './block.js'
 import {
   type Address,
   type DocumentId,
@@ -203,14 +202,4 @@ function normalizeStep(parent: Parent, child: Child, step: PathStep): PathStep {
 /** 방문한 노드의 상속을 반영한 보조데이터. */
 export function effectiveAux(visit: Visit): Aux {
   return resolveAux([...visit.ancestors.map((node) => node.aux), visit.node.aux])
-}
-
-/** 방문한 노드가 블록인지 좁힌다. */
-export function isBlockVisit(visit: Visit): visit is Visit & { node: Block } {
-  return visit.node.kind === 'block'
-}
-
-/** 방문한 노드가 섹션인지 좁힌다. */
-export function isSectionVisit(visit: Visit): visit is Visit & { node: Section } {
-  return visit.node.kind === 'section'
 }
