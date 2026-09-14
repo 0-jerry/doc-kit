@@ -11,7 +11,7 @@ export const VERSION = '0.2.0-alpha.0'
 export * from './model/index.js'
 
 // L1 저작 규약
-// export * from './schema/index.js'
+export * from './schema/index.js'
 
 // L3 조작 프로토콜
 // export * from './api/index.js'
