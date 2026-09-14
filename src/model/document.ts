@@ -22,10 +22,11 @@ import type { Child, Section } from './section.js'
 export type Parent = Document | Section
 
 export interface Visit {
-  readonly node: Child
-  /** 루트(문서)부터 직계 부모까지. */
+  /** 문서 자신도 노드다 — `Document.self()` 가 내는 방문이 그것이다. */
+  readonly node: Child | Document
+  /** 루트(문서)부터 직계 부모까지. 문서 자신의 방문에서는 비어 있다. */
   readonly ancestors: readonly Parent[]
-  /** 문서 루트 기준 위치 주소. */
+  /** 문서 루트 기준 위치 주소. 문서 자신은 비어 있다. */
   readonly path: readonly PathStep[]
 }
 
@@ -64,7 +65,15 @@ export class Document extends NodeBase implements Branch {
     return this.children.filter((child): child is Section => child.kind === 'section')
   }
 
-  /** 깊이 우선 순회. 문서 자신은 포함하지 않는다. */
+  /**
+   * 문서 자신을 가리키는 방문. 문서에 붙은 보조데이터도 검사 대상이므로
+   * 순회와 별개로 이것을 낸다.
+   */
+  self(): Visit {
+    return { node: this, ancestors: [], path: [] }
+  }
+
+  /** 깊이 우선 순회. 문서 자신은 포함하지 않는다 — 그것은 `self()` 가 낸다. */
   *walk(): Generator<Visit> {
     yield* walkChildren(this, [this], [])
   }

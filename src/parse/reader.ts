@@ -256,6 +256,7 @@ export function parseDocument(text: string, options: ParseOptions): ParseResult 
           key,
           heading: headingText,
           depth: headingNode.depth,
+          line: line ?? null,
           aux: declared.aux,
           stableId: declared.stableId,
           raw,

@@ -16,6 +16,8 @@ export interface SectionInit {
   readonly heading: string
   /** 제목의 깊이(`##` 은 2). */
   readonly depth: number
+  /** 원문에서 제목이 있는 줄. 계보이자 진단의 좌표다. */
+  readonly line?: number | null
   readonly children?: readonly Child[]
   /** 제목 줄이 차지한 원문 조각. 자식의 조각은 포함하지 않는다. */
   readonly raw?: string | null
@@ -33,6 +35,7 @@ export class Section extends NodeBase implements Branch {
   readonly children: readonly Child[]
   readonly raw: string | null
   readonly directiveRaw: string | null
+  readonly line: number | null
 
   constructor(init: SectionInit) {
     super(init.aux ?? EMPTY_AUX, init.stableId ?? null)
@@ -42,6 +45,7 @@ export class Section extends NodeBase implements Branch {
     this.children = init.children ?? []
     this.raw = init.raw ?? null
     this.directiveRaw = init.directiveRaw ?? null
+    this.line = init.line ?? null
   }
 
   get sections(): readonly Section[] {
@@ -60,6 +64,7 @@ export class Section extends NodeBase implements Branch {
       key: patch.key ?? this.key,
       heading: patch.heading ?? this.heading,
       depth: patch.depth ?? this.depth,
+      line: patch.line === undefined ? this.line : patch.line,
       children: patch.children ?? this.children,
       raw: patch.raw !== undefined ? patch.raw : headingChanged ? null : this.raw,
       directiveRaw:
