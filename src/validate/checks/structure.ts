@@ -1,5 +1,6 @@
 /** 구조가 과도한 책임을 갖지 못하게 하는 검사기들 (원칙 P3 · P4 · P6 · P9). */
 
+import { toString as mdastToString } from 'mdast-util-to-string'
 import type { Diagnostic } from '../../diagnostic/index.js'
 import { Block, Document, Section, type Visit } from '../../model/index.js'
 import type { CheckContext, DocumentCheck, NodeCheck } from '../check.js'
@@ -10,6 +11,18 @@ export function countSentences(text: string): number {
     .split(/[.!?。！？]+/)
     .map((part) => part.trim())
     .filter((part) => part.length > 0).length
+}
+
+/**
+ * 블록이 실제로 내놓는 진술들.
+ *
+ * 목록은 항목 하나가 진술 하나다. 항목을 이어 붙인 평문으로 세면
+ * 항목 수만큼 문장이 늘어나 "한 가지만 말한다"가 목록을 금지하는 규칙이 되어 버린다 —
+ * 규범 역할이 목록 형태를 허용하는 한 그렇게 읽을 수 없다.
+ */
+export function statementsOf(block: Block): readonly string[] {
+  if (block.source.type !== 'list') return [block.text]
+  return block.source.children.map((item) => mdastToString(item))
 }
 
 /** STR001 — 규범 진술이 한 가지만 말하는가. */
@@ -24,12 +37,14 @@ export class SentenceLimit implements NodeCheck {
     if (!(node instanceof Block) || node.aux.role === undefined) return []
     const limit = context.schema.role(node.aux.role)?.maxSentences
     if (limit === undefined) return []
-    const sentences = countSentences(node.text)
+    const statements = statementsOf(node)
+    const sentences = Math.max(...statements.map(countSentences))
     if (sentences <= limit) return []
+    const unit = statements.length > 1 ? '목록 항목' : '블록'
     return [
       context.report(
         this,
-        `'${node.aux.role}' 블록이 ${sentences} 문장입니다. 상한은 ${limit} 문장입니다`,
+        `'${node.aux.role}' ${unit}이 ${sentences} 문장입니다. 상한은 ${limit} 문장입니다`,
         visit,
         '근거나 예외가 섞여 있다면 해당 섹션으로 내려보내세요',
       ),

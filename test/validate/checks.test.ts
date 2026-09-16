@@ -61,6 +61,16 @@ test('STR001 — 규범 진술이 길면 경고', () => {
   assert.ok(check(`${HEAD}## 기준\n\n${long}\n\n## 근거\n\n설명.\n`).includes('STR001'))
 })
 
+test('STR001 — 목록은 항목마다 센다. 짧은 항목이 여럿이어도 넘지 않는다', () => {
+  const list = ['- 하나다.', '- 둘이다.', '- 셋이다.', '- 넷이다.', '- 다섯이다.'].join('\n')
+  assert.ok(!check(`${HEAD}## 기준\n\n${list}\n\n## 근거\n\n설명.\n`).includes('STR001'))
+})
+
+test('STR001 — 목록 항목 하나가 길면 경고', () => {
+  const list = ['- 하나다.', '- 둘이다. 셋이다. 넷이다. 다섯이다.'].join('\n')
+  assert.ok(check(`${HEAD}## 기준\n\n${list}\n\n## 근거\n\n설명.\n`).includes('STR001'))
+})
+
 test('STR002 — 섹션 블록 수 상한을 넘으면 오류', () => {
   const blocks = ['하나.', '둘.', '셋.', '넷.'].join('\n\n')
   assert.ok(check(`${HEAD}## 기준\n\n${blocks}\n\n## 근거\n\n설명.\n`).includes('STR002'))
