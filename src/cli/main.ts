@@ -57,8 +57,22 @@ function write(path: string, content: string): void {
   writeFileSync(path, content, 'utf8')
 }
 
+/** 파일들을 한 디렉터리 아래에 쓰고, 쓴 경로를 차례대로 돌려준다. */
+function writeAll(base: string, files: readonly { path: string; content: string }[]): string[] {
+  return files.map((file) => {
+    const path = join(base, file.path)
+    write(path, file.content)
+    return path
+  })
+}
+
+/** 사람도 읽을 수 있게 들여 쓴 JSON 한 덩이. 끝에 줄바꿈이 붙는다. */
+function jsonText(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`
+}
+
 function writeJson(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
+  process.stdout.write(jsonText(value))
 }
 
 /**
@@ -80,7 +94,7 @@ function openWorkspace(parsed: Parsed, rootDefault = 'rules') {
 
 function reportDiagnostics(parsed: Parsed, diagnostics: ReturnType<typeof loadWorkspace>['diagnostics']): number {
   if (hasFlag(parsed, 'json')) {
-    process.stdout.write(`${JSON.stringify(diagnostics, null, 2)}\n`)
+    writeJson(diagnostics)
   } else {
     for (const item of diagnostics) process.stdout.write(`${formatDiagnostic(item)}\n`)
     const counts = countBySeverity(diagnostics)
@@ -117,16 +131,12 @@ function commandIndex(parsed: Parsed): number {
     const head = entry.records[0]
     emit(
       join(out, 'documents', `${entry.id}.json`),
-      `${JSON.stringify(
-        {
-          id: entry.id,
-          type: head?.documentType ?? null,
-          path: head?.path ?? null,
-          records: entry.records,
-        },
-        null,
-        2,
-      )}\n`,
+      jsonText({
+        id: entry.id,
+        type: head?.documentType ?? null,
+        path: head?.path ?? null,
+        records: entry.records,
+      }),
     )
   }
   const inverted = (index: ReadonlyMap<string, readonly string[]>) =>
@@ -134,20 +144,16 @@ function commandIndex(parsed: Parsed): number {
 
   emit(
     join(out, 'index.json'),
-    `${JSON.stringify(
-      {
-        documents: workspace.documentIds,
-        bySubject: inverted(workspace.bySubject),
-        byTopic: inverted(workspace.byTopic),
-        byRole: inverted(workspace.byRole),
-        byStatus: inverted(workspace.byStatus),
-        byCollection: inverted(workspace.byCollection),
-      },
-      null,
-      2,
-    )}\n`,
+    jsonText({
+      documents: workspace.documentIds,
+      bySubject: inverted(workspace.bySubject),
+      byTopic: inverted(workspace.byTopic),
+      byRole: inverted(workspace.byRole),
+      byStatus: inverted(workspace.byStatus),
+      byCollection: inverted(workspace.byCollection),
+    }),
   )
-  emit(join(out, 'graph.json'), `${JSON.stringify({ edges: workspace.graph.edges }, null, 2)}\n`)
+  emit(join(out, 'graph.json'), jsonText({ edges: workspace.graph.edges }))
 
   if (hasFlag(parsed, 'json')) {
     writeJson({
@@ -181,18 +187,12 @@ function commandStore(parsed: Parsed): number {
   const { stats } = result
 
   if (hasFlag(parsed, 'json')) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          snapshot: result.snapshot,
-          parent: result.parent,
-          root: result.root,
-          stats: { ...stats, total: result.store.count() },
-        },
-        null,
-        2,
-      )}\n`,
-    )
+    writeJson({
+      snapshot: result.snapshot,
+      parent: result.parent,
+      root: result.root,
+      stats: { ...stats, total: result.store.count() },
+    })
     return hasError(result.workspace.diagnostics) ? 1 : 0
   }
 
@@ -213,7 +213,7 @@ function commandLog(parsed: Parsed): number {
   const history = [...store.history()]
 
   if (hasFlag(parsed, 'json')) {
-    process.stdout.write(`${JSON.stringify(history, null, 2)}\n`)
+    writeJson(history)
     return 0
   }
   if (history.length === 0) {
@@ -292,7 +292,7 @@ function commandGc(parsed: Parsed): number {
   })
 
   if (hasFlag(parsed, 'json')) {
-    process.stdout.write(`${JSON.stringify({ ...result, origin: config.origin }, null, 2)}\n`)
+    writeJson({ ...result, origin: config.origin })
     return 0
   }
 
@@ -344,7 +344,7 @@ function commandCat(parsed: Parsed): number {
         : store.snapshot(id)
 
   if (hasFlag(parsed, 'json') || object.type !== 'blob') {
-    process.stdout.write(`${JSON.stringify({ type: object.type, body }, null, 2)}\n`)
+    writeJson({ type: object.type, body })
     return 0
   }
   process.stdout.write(`${body as string}\n`)
@@ -363,7 +363,7 @@ function commandQuery(parsed: Parsed): number {
   })
 
   if (hasFlag(parsed, 'json')) {
-    process.stdout.write(`${JSON.stringify(hits, null, 2)}\n`)
+    writeJson(hits)
     return 0
   }
   for (const hit of hits) {
@@ -384,7 +384,7 @@ function commandContext(parsed: Parsed): number {
   const result = contextFor(workspace, target)
 
   if (hasFlag(parsed, 'json')) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
+    writeJson(result)
     return 0
   }
   process.stdout.write(
@@ -400,8 +400,7 @@ function commandRender(parsed: Parsed): number {
   const files = renderSite(workspace, {
     ...(flag(parsed, 'title') === undefined ? {} : { title: flag(parsed, 'title')! }),
   })
-  const written = files.map((file) => join(out, file.path))
-  files.forEach((file, index) => write(written[index]!, file.content))
+  const written = writeAll(out, files)
   if (hasFlag(parsed, 'json')) {
     writeJson({ out, written })
     return 0
@@ -433,9 +432,7 @@ function commandApply(parsed: Parsed): number {
 
   const result = applyCommands(target, commands, { schema: workspace.schema })
   if (hasFlag(parsed, 'json')) {
-    process.stdout.write(
-      `${JSON.stringify({ ok: result.ok, diagnostics: result.diagnostics }, null, 2)}\n`,
-    )
+    writeJson({ ok: result.ok, diagnostics: result.diagnostics })
   } else {
     for (const item of result.diagnostics) process.stdout.write(`${formatDiagnostic(item)}\n`)
   }
@@ -500,8 +497,7 @@ function commandSplit(parsed: Parsed): number {
     return 0
   }
 
-  const written = files.map((file) => join(root, file.path))
-  files.forEach((file, index) => write(written[index]!, file.content))
+  const written = writeAll(root, files)
   if (left && replace) rmSync(original)
 
   if (json) {
