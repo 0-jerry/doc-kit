@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { effectiveAux, parseFragment } from '../../src/model/index.js'
 import { formatDirective, parseDirective, parseDocument } from '../../src/parse/index.js'
 import { loadPreset } from '../../src/schema/index.js'
+import { serializeDocument } from '../../src/serialize/index.js'
 
 const schema = loadPreset('preset/principle')
 
@@ -95,6 +96,23 @@ test('옛 rk: 디렉티브는 읽지 않고 오류로 알린다', () => {
   const result = read(`${HEAD}## 기준\n\n<!-- rk: id=core -->\n진술.\n`)
   assert.ok(codes(result).includes('PRS006'))
   assert.equal(result.document?.sections[0]?.blocks.find((block) => block.stableId === 'core'), undefined)
+})
+
+test('옛 rk: 주석이 dk: 와 뒤 블록 사이에 끼어도 dk: 는 뒤 블록에 붙고 원문은 그대로다', () => {
+  const text = `${HEAD}## 기준\n\n<!-- dk: id=a -->\n<!-- rk: role=note -->\n진술.\n\n## 근거\n\n설명.\n`
+  const result = read(text)
+  assert.ok(codes(result).includes('PRS006'))
+  const blocks = result.document!.sections[0]!.blocks
+  assert.deepEqual(
+    blocks.map((block) => [block.text, block.stableId]),
+    [['진술.', 'a']],
+  )
+  assert.equal(serializeDocument(result.document!, { schema }), text)
+})
+
+test('다른 HTML 과 한 블록에 섞인 옛 rk: 주석도 알린다', () => {
+  const result = read(`${HEAD}## 기준\n\n<div>\n<!-- rk: id=core -->\n표\n</div>\n\n진술.\n`)
+  assert.ok(codes(result).includes('PRS006'))
 })
 
 test('frontmatter 가 없으면 오류지만 문서는 만든다', () => {

@@ -10,7 +10,8 @@
 const DIRECTIVE = /^<!--\s*dk:\s*([\s\S]*?)\s*-->$/
 
 /** rule-kit 시절의 표기. 더는 읽지 않지만, 보조데이터가 조용히 사라지지 않게 알아본다. */
-const LEGACY_DIRECTIVE = /^<!--\s*rk:[\s\S]*-->$/
+const LEGACY_DIRECTIVE = /^<!--\s*rk:(?:(?!-->)[\s\S])*-->$/
+const LEGACY_ANYWHERE = /<!--\s*rk:/
 
 export interface DirectiveEntry {
   readonly key: string
@@ -30,9 +31,14 @@ export function isDirective(html: string): boolean {
   return DIRECTIVE.test(html.trim())
 }
 
-/** 이 원문이 옛 `rk:` 디렉티브인가. */
+/** 이 원문이 옛 `rk:` 디렉티브 주석 하나뿐인가. */
 export function isLegacyDirective(html: string): boolean {
   return LEGACY_DIRECTIVE.test(html.trim())
+}
+
+/** 이 원문 어딘가에 옛 `rk:` 디렉티브가 섞여 있는가. 다른 HTML 과 한 블록으로 묶인 경우를 잡는다. */
+export function containsLegacyDirective(html: string): boolean {
+  return LEGACY_ANYWHERE.test(html)
 }
 
 /** 디렉티브 본문을 `key=value` 쌍으로 쪼갠다. */

@@ -95,6 +95,11 @@ test('split --json --dry-run 은 쓰지 않고 파일 내용을 낸다', () => {
     assert.deepEqual(output.written, [])
     assert.ok(output.files.length > 1)
     assert.ok(!existsSync(join(root, 'principle', '불변식', 'node.md')))
+    // 실제로 돌리면 원본이 남는다는 것을 미리 알린다
+    assert.deepEqual(output.original, {
+      path: join(root, 'principle', '불변식.md'),
+      removed: false,
+    })
   } finally {
     cleanup()
   }
@@ -145,6 +150,26 @@ test('init --json 은 쓴 설정 파일과 정책을 낸다', () => {
     assert.equal(output.preset, 'preset/principle')
     assert.equal(output.written.length, 2)
     assert.ok(output.written.every((path: string) => existsSync(path) && path.startsWith(base)))
+  } finally {
+    cleanup()
+  }
+})
+
+test('--json 이면 실패도 표준 출력에 JSON 으로 낸다', () => {
+  const { base, root, cleanup } = project()
+  try {
+    const missing = runJson(['split', root])
+    assert.equal(missing.code, 2)
+    assert.match(missing.output.error, /--document/)
+
+    const unknown = runJson(['assemble', root, '--document', 'principle/없음'])
+    assert.equal(unknown.code, 2)
+    assert.match(unknown.output.error, /principle\/없음/)
+
+    // 규약 파일이 이미 있으므로 init 은 거절한다
+    const conflict = runJson(['init', root])
+    assert.equal(conflict.code, 1)
+    assert.ok(conflict.output.error.includes(join(base, '.dockit', 'schema.yaml')))
   } finally {
     cleanup()
   }

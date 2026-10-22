@@ -61,6 +61,16 @@ function writeJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
 }
 
+/**
+ * 명령을 멈추고 까닭을 알린다. `--json` 이면 표준 출력에 `{ error }` 를 낸다 —
+ * 결과를 JSON 으로 읽는 쪽이 실패도 같은 자리에서 읽을 수 있어야 한다.
+ */
+function fail(parsed: Parsed, code: number, message: string): number {
+  if (hasFlag(parsed, 'json')) writeJson({ error: message.trimEnd() })
+  else process.stderr.write(message)
+  return code
+}
+
 function openWorkspace(parsed: Parsed, rootDefault = 'rules') {
   const root = parsed.command === 'context' ? (flag(parsed, 'root') ?? rootDefault)
     : (parsed.positional[0] ?? rootDefault)
@@ -225,8 +235,7 @@ function commandInit(parsed: Parsed): number {
   const root = parsed.positional[0] ?? 'rules'
   const retentionFlag = flag(parsed, 'retention') ?? 'head'
   if (retentionFlag !== 'head' && retentionFlag !== 'all') {
-    process.stderr.write(`--retention 은 head 또는 all 입니다: ${retentionFlag}\n`)
-    return 2
+    return fail(parsed, 2, `--retention 은 head 또는 all 입니다: ${retentionFlag}\n`)
   }
   const retention: Retention = retentionFlag
   const preset = flag(parsed, 'preset') ?? 'preset/principle'
@@ -239,8 +248,11 @@ function commandInit(parsed: Parsed): number {
 
   const existing = [schemaPath, configPath].filter((path) => existsSync(path))
   if (existing.length > 0 && !force) {
-    process.stderr.write(`이미 있습니다: ${existing.join(' · ')}\n덮어쓰려면 --force 를 주세요\n`)
-    return 1
+    return fail(
+      parsed,
+      1,
+      `이미 있습니다: ${existing.join(' · ')}\n덮어쓰려면 --force 를 주세요\n`,
+    )
   }
 
   write(schemaPath, `# doc-kit 저작 규약.\nversion: 1\nextends: ${preset}\n`)
@@ -306,23 +318,22 @@ function commandGc(parsed: Parsed): number {
 function commandCat(parsed: Parsed): number {
   const prefix = parsed.positional[0]
   if (prefix === undefined) {
-    process.stderr.write('객체 주소를 주세요\n')
-    return 2
+    return fail(parsed, 2, '객체 주소를 주세요\n')
   }
   const store = openStore(flag(parsed, 'store'), flag(parsed, 'root') ?? 'rules')
   // `log` 와 `store` 는 앞 12 자만 보여 준다. 그것을 그대로 받아야 한다.
   const matches = store.matching(prefix)
   if (matches.length > 1) {
-    process.stderr.write(
+    return fail(
+      parsed,
+      2,
       `주소가 여럿과 겹칩니다: ${prefix}\n${matches.map((id) => `  ${id}`).join('\n')}\n`,
     )
-    return 2
   }
   const id = matches[0]
   const object = id === undefined ? null : store.read(id)
   if (id === undefined || object === null) {
-    process.stderr.write(`그런 객체가 없습니다: ${prefix}\n`)
-    return 2
+    return fail(parsed, 2, `그런 객체가 없습니다: ${prefix}\n`)
   }
 
   const body =
@@ -367,8 +378,7 @@ function commandQuery(parsed: Parsed): number {
 function commandContext(parsed: Parsed): number {
   const target = parsed.positional[0]
   if (target === undefined) {
-    process.stderr.write('파일 경로를 주세요\n')
-    return 2
+    return fail(parsed, 2, '파일 경로를 주세요\n')
   }
   const { workspace } = openWorkspace(parsed)
   const result = contextFor(workspace, target)
@@ -403,8 +413,7 @@ function commandRender(parsed: Parsed): number {
 function commandApply(parsed: Parsed): number {
   const source = flag(parsed, 'commands')
   if (source === undefined) {
-    process.stderr.write('--commands <파일|-> 로 명령을 주세요\n')
-    return 2
+    return fail(parsed, 2, '--commands <파일|-> 로 명령을 주세요\n')
   }
   const text = source === '-' ? readFileSync(0, 'utf8') : readFileSync(source, 'utf8')
   let commands: unknown[]
@@ -412,16 +421,14 @@ function commandApply(parsed: Parsed): number {
     const parsedJson: unknown = JSON.parse(text)
     commands = Array.isArray(parsedJson) ? parsedJson : [parsedJson]
   } catch (error) {
-    process.stderr.write(`명령을 읽을 수 없습니다: ${(error as Error).message}\n`)
-    return 2
+    return fail(parsed, 2, `명령을 읽을 수 없습니다: ${(error as Error).message}\n`)
   }
 
   const { root, workspace } = openWorkspace(parsed)
   const documentId = flag(parsed, 'document')
   const target = documentId === undefined ? null : workspace.document(documentId)
   if (documentId !== undefined && target === null) {
-    process.stderr.write(`그런 문서가 없습니다: ${documentId}\n`)
-    return 2
+    return fail(parsed, 2, `그런 문서가 없습니다: ${documentId}\n`)
   }
 
   const result = applyCommands(target, commands, { schema: workspace.schema })
@@ -454,35 +461,47 @@ function commandSplit(parsed: Parsed): number {
   const { root, workspace } = openWorkspace(parsed)
   const documentId = flag(parsed, 'document')
   if (documentId === undefined) {
-    process.stderr.write('--document <id> 로 흩을 문서를 고르세요\n')
-    return 2
+    return fail(parsed, 2, '--document <id> 로 흩을 문서를 고르세요\n')
   }
   const document = workspace.document(documentId)
   if (document === null) {
-    process.stderr.write(`그런 문서가 없습니다: ${documentId}\n`)
-    return 2
+    return fail(parsed, 2, `그런 문서가 없습니다: ${documentId}\n`)
   }
 
   const files = splitDocument(document, workspace.schema)
   const json = hasFlag(parsed, 'json')
+  // 원본 단일 파일이 남아 있으면 같은 식별자를 가진 문서가 둘이 된다.
+  // --dry-run 도 이것을 알려야 실제로 돌릴 때 놀라지 않는다.
+  const original = join(root, `${document.id}.md`)
+  const left = existsSync(original)
+  const replace = hasFlag(parsed, 'replace')
+
   if (hasFlag(parsed, 'dry-run')) {
     if (json) {
-      writeJson({ document: document.id, dryRun: true, written: [], files, original: null })
+      writeJson({
+        document: document.id,
+        dryRun: true,
+        written: [],
+        files,
+        original: left ? { path: original, removed: false } : null,
+      })
       return 0
     }
     for (const file of files) {
       process.stdout.write(`\n--- ${file.path} (쓰지 않음) ---\n${file.content}`)
+    }
+    if (left) {
+      process.stdout.write(
+        replace
+          ? `\n${original} 을 지울 것입니다 (쓰지 않음)\n`
+          : `\n${original} 이 남습니다. 같은 식별자를 가진 문서가 둘이 됩니다 — --replace 를 주세요\n`,
+      )
     }
     return 0
   }
 
   const written = files.map((file) => join(root, file.path))
   files.forEach((file, index) => write(written[index]!, file.content))
-
-  // 원본 단일 파일이 남아 있으면 같은 식별자를 가진 문서가 둘이 된다.
-  const original = join(root, `${document.id}.md`)
-  const left = existsSync(original)
-  const replace = hasFlag(parsed, 'replace')
   if (left && replace) rmSync(original)
 
   if (json) {
@@ -512,13 +531,11 @@ function commandAssemble(parsed: Parsed): number {
   const { workspace } = openWorkspace(parsed)
   const documentId = flag(parsed, 'document')
   if (documentId === undefined) {
-    process.stderr.write('--document <id> 로 합칠 문서를 고르세요\n')
-    return 2
+    return fail(parsed, 2, '--document <id> 로 합칠 문서를 고르세요\n')
   }
   const document = workspace.document(documentId)
   if (document === null) {
-    process.stderr.write(`그런 문서가 없습니다: ${documentId}\n`)
-    return 2
+    return fail(parsed, 2, `그런 문서가 없습니다: ${documentId}\n`)
   }
 
   const text = serializeDocument(document, { schema: workspace.schema })
@@ -566,7 +583,6 @@ export function run(argv: readonly string[]): number {
   try {
     return handler(parsed)
   } catch (error) {
-    process.stderr.write(`${(error as Error).message}\n`)
-    return 2
+    return fail(parsed, 2, `${(error as Error).message}\n`)
   }
 }

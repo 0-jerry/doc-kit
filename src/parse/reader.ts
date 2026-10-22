@@ -26,7 +26,13 @@ import {
 } from '../model/index.js'
 import type { Schema } from '../schema/index.js'
 import { buildAux, entriesFromObject } from './aux-source.js'
-import { type DirectiveEntry, isDirective, isLegacyDirective, parseDirective } from './directive.js'
+import {
+  type DirectiveEntry,
+  containsLegacyDirective,
+  isDirective,
+  isLegacyDirective,
+  parseDirective,
+} from './directive.js'
 
 const processor = unified().use(remarkParse).use(remarkFrontmatter, ['yaml']).use(remarkGfm)
 
@@ -200,6 +206,19 @@ export function parseSource(text: string, options: SourceOptions): SourceParse |
         '옛 rk: 디렉티브입니다. 보조데이터로 읽지 않습니다',
         lineOf(node),
         '`<!-- rk: … -->` 를 `<!-- dk: … -->` 로 고치세요',
+      )
+      // 디렉티브 무리에 끼워 둔다. 앞의 dk: 가 이 주석이 아니라 뒤따르는 노드에 붙어야 하고,
+      // 원문은 그 노드의 디렉티브 조각으로 남는다.
+      pending ??= { start: startOf(node), entries: [], problems: [] }
+      continue
+    }
+    if (node.type === 'html' && containsLegacyDirective(node.value)) {
+      report(
+        'PRS006',
+        'error',
+        '옛 rk: 디렉티브가 다른 HTML 과 한 블록에 섞여 있습니다. 보조데이터로 읽지 않습니다',
+        lineOf(node),
+        '`<!-- dk: … -->` 로 고치고, 설명하려는 블록 바로 앞 줄에 따로 두세요',
       )
     }
     units.push({
