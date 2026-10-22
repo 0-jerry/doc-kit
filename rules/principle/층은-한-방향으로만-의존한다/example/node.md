@@ -1,7 +1,7 @@
 ---
 ---
 
-<!-- rk: role=counter-example -->
+<!-- dk: role=counter-example -->
 ```ts
 // src/model/block.ts
 import { validateBlock } from '../validate/index.js' // 모델이 검사를 안다

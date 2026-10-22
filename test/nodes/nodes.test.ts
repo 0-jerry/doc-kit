@@ -28,7 +28,7 @@ status: active
 
 ## 기준
 
-<!-- rk: id=core -->
+<!-- dk: id=core -->
 불변식은 생성자에서 검증한다.
 
 ## 근거
@@ -41,7 +41,7 @@ status: active
 
 ## 예시
 
-<!-- rk: role=counter-example -->
+<!-- dk: role=counter-example -->
 \`\`\`swift
 init(age: Int) { self.age = age }
 \`\`\`
@@ -107,7 +107,7 @@ test('부모는 자식 내용 대신 이름만 인덱스로 갖는다', () => {
 test('노드는 자기가 정의한 내용만 소유한다', () => {
   const files = splitDocument(original(), schema)
   const norm = files.find((file) => file.path.endsWith(`norm/${NODE_FILE}`))!.content
-  assert.equal(norm, '---\n---\n\n<!-- rk: id=core -->\n불변식은 생성자에서 검증한다.\n')
+  assert.equal(norm, '---\n---\n\n<!-- dk: id=core -->\n불변식은 생성자에서 검증한다.\n')
 })
 
 test('규약이 아는 제목은 다시 적지 않고, 모르는 제목만 적는다', () => {

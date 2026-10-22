@@ -26,7 +26,7 @@ import {
 } from '../model/index.js'
 import type { Schema } from '../schema/index.js'
 import { buildAux, entriesFromObject } from './aux-source.js'
-import { type DirectiveEntry, isDirective, parseDirective } from './directive.js'
+import { type DirectiveEntry, isDirective, isLegacyDirective, parseDirective } from './directive.js'
 
 const processor = unified().use(remarkParse).use(remarkFrontmatter, ['yaml']).use(remarkGfm)
 
@@ -192,6 +192,15 @@ export function parseSource(text: string, options: SourceOptions): SourceParse |
         pending.problems.push(...problems)
       }
       continue
+    }
+    if (node.type === 'html' && isLegacyDirective(node.value)) {
+      report(
+        'PRS006',
+        'error',
+        '옛 rk: 디렉티브입니다. 보조데이터로 읽지 않습니다',
+        lineOf(node),
+        '`<!-- rk: … -->` 를 `<!-- dk: … -->` 로 고치세요',
+      )
     }
     units.push({
       node,

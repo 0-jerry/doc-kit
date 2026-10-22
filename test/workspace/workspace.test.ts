@@ -32,7 +32,7 @@ status: active
 
 ## 기준
 
-<!-- rk: id=core -->
+<!-- dk: id=core -->
 불변식은 생성자에서 검증한다.
 
 ## 근거
@@ -54,7 +54,7 @@ refines: principle/불변식#core
 
 ## 기준
 
-<!-- rk: id=core -->
+<!-- dk: id=core -->
 경계에서만 로그를 남긴다.
 
 ## 근거
@@ -136,11 +136,11 @@ test('REF002 — 가리키는 곳이 없는 링크는 오류', () => {
 test('REF003 — 비순환 관계의 순환은 오류', () => {
   const a = source(
     'a',
-    '---\ntype: principle\nid: a\nrefines: principle/b#core\n---\n\n## 기준\n\n<!-- rk: id=core -->\n진술 가.\n\n## 근거\n\n설명.\n',
+    '---\ntype: principle\nid: a\nrefines: principle/b#core\n---\n\n## 기준\n\n<!-- dk: id=core -->\n진술 가.\n\n## 근거\n\n설명.\n',
   )
   const b = source(
     'b',
-    '---\ntype: principle\nid: b\nrefines: principle/a#core\n---\n\n## 기준\n\n<!-- rk: id=core -->\n진술 나.\n\n## 근거\n\n설명.\n',
+    '---\ntype: principle\nid: b\nrefines: principle/a#core\n---\n\n## 기준\n\n<!-- dk: id=core -->\n진술 나.\n\n## 근거\n\n설명.\n',
   )
   const codes = build([a, b]).diagnostics.map((item) => item.code)
   assert.ok(codes.includes('REF003'))

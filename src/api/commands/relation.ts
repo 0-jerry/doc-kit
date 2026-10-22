@@ -78,7 +78,7 @@ export class RelationLink implements CommandHandler<LinkRelation> {
         refusal('CMD016', '관계의 출발 노드에 안정 식별자가 없습니다', {
           document: document.id,
           address: command.at,
-          hint: '먼저 `<!-- rk: id=… -->` 로 이름을 주세요',
+          hint: '먼저 `<!-- dk: id=… -->` 로 이름을 주세요',
         }),
       )
     }

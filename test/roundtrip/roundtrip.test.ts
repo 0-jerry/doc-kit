@@ -47,7 +47,7 @@ since: 2026-09-15
 
 ## 기준
 
-<!-- rk: id=core -->
+<!-- dk: id=core -->
 객체의 불변식은 생성자에서 검증하고, 검증에 실패하면 인스턴스를 만들지 않는다.
 
 ## 근거
@@ -57,7 +57,7 @@ since: 2026-09-15
 
 ## 예시
 
-<!-- rk: role=counter-example -->
+<!-- dk: role=counter-example -->
 \`\`\`swift
 init(age: Int) { self.age = age }   // 음수 나이를 통과시킨다
 \`\`\`
@@ -71,7 +71,7 @@ init(age: Int) throws {
 
 ## 예외
 
-<!-- rk: subject=[test-fixture] -->
+<!-- dk: subject=[test-fixture] -->
 테스트 픽스처 빌더는 의도적으로 무효 상태를 만들기 위해 검증을 우회할 수 있다.
 `,
 

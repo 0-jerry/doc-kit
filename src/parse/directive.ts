@@ -1,13 +1,16 @@
 /**
  * 블록 보조데이터의 저작 채널. 노드 바로 앞에 붙는 HTML 주석 하나를 읽는다.
  *
- *     <!-- rk: id=core role=norm subject=[test-fixture, infra] status=deprecated -->
+ *     <!-- dk: id=core role=norm subject=[test-fixture, infra] status=deprecated -->
  *
  * HTML 주석으로 둔 것은 마크다운으로서 유효하고, 일반 뷰어에서 보이지 않으며,
  * 원문에서의 위치가 그대로 보존되기 때문이다.
  */
 
-const DIRECTIVE = /^<!--\s*rk:\s*([\s\S]*?)\s*-->$/
+const DIRECTIVE = /^<!--\s*dk:\s*([\s\S]*?)\s*-->$/
+
+/** rule-kit 시절의 표기. 더는 읽지 않지만, 보조데이터가 조용히 사라지지 않게 알아본다. */
+const LEGACY_DIRECTIVE = /^<!--\s*rk:[\s\S]*-->$/
 
 export interface DirectiveEntry {
   readonly key: string
@@ -25,6 +28,11 @@ export interface DirectiveParse {
 /** 이 원문이 디렉티브 주석인가. */
 export function isDirective(html: string): boolean {
   return DIRECTIVE.test(html.trim())
+}
+
+/** 이 원문이 옛 `rk:` 디렉티브인가. */
+export function isLegacyDirective(html: string): boolean {
+  return LEGACY_DIRECTIVE.test(html.trim())
 }
 
 /** 디렉티브 본문을 `key=value` 쌍으로 쪼갠다. */
@@ -103,5 +111,5 @@ export function formatDirective(entries: readonly DirectiveEntry[]): string | nu
         : `${entry.key}=${entry.values[0]}`
     })
     .join(' ')
-  return `<!-- rk: ${body} -->`
+  return `<!-- dk: ${body} -->`
 }

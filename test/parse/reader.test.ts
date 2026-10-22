@@ -52,7 +52,7 @@ test('섹션 제목은 규약의 키로 옮겨지고 기본 역할이 해소된�
 })
 
 test('디렉티브가 기본 역할을 덮어쓴다', () => {
-  const { document } = read(`${HEAD}## 예시\n\n<!-- rk: role=counter-example id=bad -->\n반례 문단.\n`)
+  const { document } = read(`${HEAD}## 예시\n\n<!-- dk: role=counter-example id=bad -->\n반례 문단.\n`)
   const block = document!.resolve(parseFragment('bad')!)
   assert.equal(block?.node.aux.role, 'counter-example')
   assert.equal(block?.node.stableId, 'bad')
@@ -60,7 +60,7 @@ test('디렉티브가 기본 역할을 덮어쓴다', () => {
 
 test('디렉티브의 대상과 주제는 상속을 통해 좁혀진다', () => {
   const { document } = read(
-    '---\ntype: principle\nid: sample\nsubject: [domain, app]\n---\n\n## 기준\n\n<!-- rk: subject=[domain] topic=[invariant] -->\n진술.\n',
+    '---\ntype: principle\nid: sample\nsubject: [domain, app]\n---\n\n## 기준\n\n<!-- dk: subject=[domain] topic=[invariant] -->\n진술.\n',
   )
   const visit = document!.resolve(parseFragment('norm/0')!)!
   const resolved = effectiveAux(visit)
@@ -75,20 +75,26 @@ test('규약에 없는 제목은 경고하고 슬러그 키로 담는다', () =>
 })
 
 test('규약에 없는 디렉티브 키는 오류다', () => {
-  const result = read(`${HEAD}## 기준\n\n<!-- rk: 없는키=값 -->\n진술.\n`)
+  const result = read(`${HEAD}## 기준\n\n<!-- dk: 없는키=값 -->\n진술.\n`)
   assert.ok(codes(result).includes('PRS004'))
 })
 
 test('역할을 여럿 적으면 오류로 알린다', () => {
-  const result = read(`${HEAD}## 기준\n\n<!-- rk: role=[norm, note] -->\n진술.\n`)
+  const result = read(`${HEAD}## 기준\n\n<!-- dk: role=[norm, note] -->\n진술.\n`)
   assert.ok(codes(result).includes('PRS004'))
   assert.match(result.diagnostics.map((item) => item.message).join(), /블록을 나누세요/)
 })
 
 test('붙을 곳이 없는 디렉티브는 경고한다', () => {
-  const result = read(`${HEAD}## 기준\n\n진술.\n\n<!-- rk: role=note -->\n`)
+  const result = read(`${HEAD}## 기준\n\n진술.\n\n<!-- dk: role=note -->\n`)
   assert.ok(codes(result).includes('PRS004'))
   assert.equal(result.document?.sections.length, 1)
+})
+
+test('옛 rk: 디렉티브는 읽지 않고 오류로 알린다', () => {
+  const result = read(`${HEAD}## 기준\n\n<!-- rk: id=core -->\n진술.\n`)
+  assert.ok(codes(result).includes('PRS006'))
+  assert.equal(result.document?.sections[0]?.blocks.find((block) => block.stableId === 'core'), undefined)
 })
 
 test('frontmatter 가 없으면 오류지만 문서는 만든다', () => {
@@ -122,14 +128,14 @@ test('중첩 섹션은 제목 깊이로 이어진다', () => {
 
 test('공백을 담은 값은 목록 표기로 써야 다시 읽힌다', () => {
   const line = formatDirective([{ key: 'status', values: ['외부 API'], isList: false }])
-  assert.equal(line, '<!-- rk: status=[외부 API] -->')
+  assert.equal(line, '<!-- dk: status=[외부 API] -->')
   assert.deepEqual(parseDirective(line!)?.entries, [
     { key: 'status', values: ['외부 API'], isList: true },
   ])
 })
 
 test('안정 식별자에 주소 구분자가 섞이면 오류다', () => {
-  const result = read(`${HEAD}## 기준\n\n<!-- rk: id=a#b -->\n진술.\n`)
+  const result = read(`${HEAD}## 기준\n\n<!-- dk: id=a#b -->\n진술.\n`)
   assert.ok(codes(result).includes('PRS004'))
   assert.equal(result.document?.sections[0]?.blocks[0]?.stableId, null)
 })

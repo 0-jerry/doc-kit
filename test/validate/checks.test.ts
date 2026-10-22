@@ -44,7 +44,7 @@ test('SCH001 — 규약에 없는 섹션은 오류', () => {
 })
 
 test('SCH005 — 규약에 없는 역할은 오류', () => {
-  assert.ok(check(`${VALID}\n<!-- rk: role=없는역할 -->\n문단.\n`).includes('SCH005'))
+  assert.ok(check(`${VALID}\n<!-- dk: role=없는역할 -->\n문단.\n`).includes('SCH005'))
 })
 
 test('SCH007 — 역할이 요구하는 형태가 아니면 오류', () => {
@@ -87,7 +87,7 @@ test('STR004 — 형제가 임계값을 넘으면 경고', () => {
 })
 
 test('AUX001 — 자손이 조상보다 넓은 대상을 주장하면 오류', () => {
-  const body = `---\ntype: principle\nid: sample\nsubject: [domain]\n---\n\n## 기준\n\n<!-- rk: subject=[infra] -->\n진술.\n\n## 근거\n\n설명.\n`
+  const body = `---\ntype: principle\nid: sample\nsubject: [domain]\n---\n\n## 기준\n\n<!-- dk: subject=[infra] -->\n진술.\n\n## 근거\n\n설명.\n`
   assert.ok(check(body).includes('AUX001'))
 })
 
@@ -97,14 +97,14 @@ test('AUX002 — 닫힌 어휘 밖의 값은 오류', () => {
 })
 
 test('AUX003 — 자손이 조상보다 강하면 오류', () => {
-  const body = `---\ntype: principle\nid: sample\nstatus: deprecated\n---\n\n## 기준\n\n<!-- rk: status=active -->\n진술.\n\n## 근거\n\n설명.\n`
+  const body = `---\ntype: principle\nid: sample\nstatus: deprecated\n---\n\n## 기준\n\n<!-- dk: status=active -->\n진술.\n\n## 근거\n\n설명.\n`
   assert.ok(check(body).includes('AUX003'))
 })
 
 test('AUX004 — 안정 식별자 중복과 섹션 키 충돌은 오류', () => {
-  const duplicated = `${HEAD}## 기준\n\n<!-- rk: id=core -->\n진술.\n\n## 근거\n\n<!-- rk: id=core -->\n설명.\n`
+  const duplicated = `${HEAD}## 기준\n\n<!-- dk: id=core -->\n진술.\n\n## 근거\n\n<!-- dk: id=core -->\n설명.\n`
   assert.ok(check(duplicated).includes('AUX004'))
-  const clashing = `${HEAD}## 기준\n\n<!-- rk: id=rationale -->\n진술.\n\n## 근거\n\n설명.\n`
+  const clashing = `${HEAD}## 기준\n\n<!-- dk: id=rationale -->\n진술.\n\n## 근거\n\n설명.\n`
   assert.ok(check(clashing).includes('AUX004'))
 })
 
@@ -126,7 +126,7 @@ test('SCH006 — 섹션이 허용하지 않은 역할은 오류', () => {
       },
     },
   })
-  const body = `${HEAD}## 기준\n\n<!-- rk: role=note -->\n진술.\n\n## 근거\n\n설명.\n`
+  const body = `${HEAD}## 기준\n\n<!-- dk: role=note -->\n진술.\n\n## 근거\n\n설명.\n`
   assert.ok(check(body, { schemaOverride: restricted }).includes('SCH006'))
 })
 

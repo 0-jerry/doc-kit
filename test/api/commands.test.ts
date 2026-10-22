@@ -16,7 +16,7 @@ id: sample
 
 ## 기준
 
-<!-- rk: id=core -->
+<!-- dk: id=core -->
 진술이다.
 
 ## 근거
@@ -119,7 +119,7 @@ test('block.update — 본문만 바꾸면 나머지는 원문 그대로다', ()
   )
   assert.equal(result.ok, true)
   const output = serializeDocument(result.document!, { schema })
-  assert.match(output, /<!-- rk: id=core -->\n고친 진술이다\./)
+  assert.match(output, /<!-- dk: id=core -->\n고친 진술이다\./)
   assert.ok(output.includes('설명이다.'))
 })
 
@@ -143,10 +143,10 @@ id: sample
 
 ## 기준
 
-<!-- rk: id=core subject=[domain] -->
+<!-- dk: id=core subject=[domain] -->
 진술이다.
 
-<!-- rk: subject=[app] -->
+<!-- dk: subject=[app] -->
 ## 근거
 
 설명이다.

@@ -1,7 +1,7 @@
 ---
 ---
 
-<!-- rk: role=counter-example -->
+<!-- dk: role=counter-example -->
 ```ts
 // REF001 을 blob 주소로 판정하면
 const duplicate = store.has(blobIdOf(record.text))

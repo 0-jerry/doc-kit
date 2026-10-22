@@ -1,7 +1,7 @@
 ---
 ---
 
-<!-- rk: role=counter-example -->
+<!-- dk: role=counter-example -->
 ```markdown
 ---
 subject: [domain]
@@ -9,6 +9,6 @@ subject: [domain]
 
 ## 예외
 
-<!-- rk: subject=[infra] -->
+<!-- dk: subject=[infra] -->
 인프라에서는 이렇게 한다.
 ```

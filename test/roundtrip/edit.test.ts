@@ -16,7 +16,7 @@ id: sample
 
 ## 기준
 
-<!-- rk: id=core -->
+<!-- dk: id=core -->
 원래 진술.
 
 ## 근거
@@ -62,7 +62,7 @@ test('본문을 고치면 그 블록만 달라진다', () => {
   })
   const output = serializeDocument(replaceBlock('core', edited), { schema })
 
-  assert.match(output, /<!-- rk: id=core -->\n고친 진술\./)
+  assert.match(output, /<!-- dk: id=core -->\n고친 진술\./)
   assert.doesNotMatch(output, /원래 진술/)
   // 손대지 않은 부분은 원문 그대로
   assert.ok(output.includes('| 표도 | 그대로 |'))
@@ -79,7 +79,7 @@ test('보조데이터만 고치면 본문은 원문 그대로다', () => {
   const output = serializeDocument(replaceBlock('core', edited), { schema })
 
   // 역할이 섹션 기본값과 같으면 다시 쓰지 않는다
-  assert.match(output, /<!-- rk: id=core subject=\[domain\] level=must -->\n원래 진술\./)
+  assert.match(output, /<!-- dk: id=core subject=\[domain\] level=must -->\n원래 진술\./)
   assert.ok(output.includes('| 표도 | 그대로 |'))
 })
 
@@ -88,7 +88,7 @@ test('규약을 주지 않으면 해소된 기본 역할도 그대로 적는다'
   const visit = document.resolve(parseFragment('core')!)!
   const edited = (visit.node as Block).with({ aux: aux({ role: 'norm' }) })
   const output = serializeDocument(replaceBlock('core', edited))
-  assert.match(output, /<!-- rk: id=core role=norm -->/)
+  assert.match(output, /<!-- dk: id=core role=norm -->/)
 })
 
 test('문서 타입을 바꾸면 frontmatter 를 다시 쓴다', () => {
