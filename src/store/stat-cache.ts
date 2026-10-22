@@ -5,7 +5,7 @@
  * 인덱싱 비용이 실제로 떨어지는 자리는 여기다 — 해싱을 아끼는 것이 아니라,
  * 바뀐 파일이 무엇인지 **읽기 전에** 알아내서 파싱과 검증을 건너뛰는 것이 목적이다.
  *
- *   .dockit/index    "RKIX" + 버전 + 개수 + 항목들 (리틀엔디언 고정폭 + LEB128 경로)
+ *   .dockit/index    "DKIX" + 버전 + 개수 + 항목들 (리틀엔디언 고정폭 + LEB128 경로)
  *
  * **수정시각이 캐시 파일보다 늦지 않은 항목은 믿지 않는다.** 해싱한 바로 그 시각 단위
  * 안에서 같은 크기로 다시 고쳐진 파일은 stat 만으로 구별할 수 없다(Git 의 racy-git 과 같은 문제).
@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path'
 import { HASH_BYTES, type ObjectId, contentHash, fromRaw, toRaw } from './hash.js'
 import { readVarint, writeVarint } from './wire.js'
 
-const MAGIC = 'RKIX'
+const MAGIC = 'DKIX'
 const VERSION = 1
 
 interface Entry {

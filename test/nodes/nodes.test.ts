@@ -4,6 +4,9 @@
  */
 
 import assert from 'node:assert/strict'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import { parseDocument } from '../../src/parse/index.js'
 import { loadPreset } from '../../src/schema/index.js'
@@ -12,6 +15,7 @@ import {
   NODE_FILE,
   type NodeFile,
   type NodeFiles,
+  readEntries,
   readNodeTree,
   splitDocument,
 } from '../../src/nodes/index.js'
@@ -257,4 +261,27 @@ test('NODE004 — 루트 노드 파일 안의 제목도 경고한다', () => {
     ]),
   })
   assert.ok(result.diagnostics.some((item) => item.code === 'NODE004'))
+})
+
+test('디렉터리 항목은 이름 순이고, 점 항목을 빼며, 링크는 가리키는 곳의 종류를 따른다', () => {
+  const base = mkdtempSync(join(tmpdir(), 'dockit-entries-'))
+  try {
+    mkdirSync(join(base, 'b'))
+    mkdirSync(join(base, '.hidden'))
+    writeFileSync(join(base, NODE_FILE), '')
+    symlinkSync(join(base, 'b'), join(base, 'a'))
+    symlinkSync(join(base, NODE_FILE), join(base, 'c.md'))
+    symlinkSync(join(base, '없음'), join(base, 'd'))
+
+    assert.deepEqual(readEntries(base), [
+      { name: 'a', isDirectory: true },
+      { name: 'b', isDirectory: true },
+      { name: 'c.md', isDirectory: false },
+      { name: 'd', isDirectory: false },
+      { name: NODE_FILE, isDirectory: false },
+    ])
+    assert.deepEqual(readEntries(join(base, '없는-디렉터리')), [])
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
 })

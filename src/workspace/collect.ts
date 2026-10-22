@@ -1,8 +1,8 @@
 /** 디렉터리에서 문서를 모은다. 파싱도 검증도 하지 않고 파일만 찾는다 — 내용은 필요할 때 읽는다. */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { NODE_FILE } from '../nodes/index.js'
+import { NODE_FILE, readEntries } from '../nodes/index.js'
 
 export interface SourceFile {
   readonly kind: 'file'
@@ -34,41 +34,31 @@ export type DocumentSource = SourceFile | SourceTree
  */
 export function collectSources(root: string): DocumentSource[] {
   const sources: DocumentSource[] = []
-  let entries: string[]
-  try {
-    entries = readdirSync(root)
-  } catch {
-    return sources
-  }
 
-  for (const collection of entries.sort()) {
-    if (collection.startsWith('.')) continue
-    const directory = join(root, collection)
-    if (!statSync(directory).isDirectory()) continue
+  for (const collection of readEntries(root)) {
+    if (!collection.isDirectory) continue
+    const directory = join(root, collection.name)
 
-    for (const entry of readdirSync(directory).sort()) {
-      if (entry.startsWith('.')) continue
-      const full = join(directory, entry)
-
-      if (statSync(full).isDirectory()) {
-        if (!existsSync(join(full, NODE_FILE))) continue
+    for (const entry of readEntries(directory)) {
+      if (entry.isDirectory) {
+        if (!existsSync(join(directory, entry.name, NODE_FILE))) continue
         sources.push({
           kind: 'tree',
-          path: `${collection}/${entry}/${NODE_FILE}`,
-          collection,
-          name: entry,
+          path: `${collection.name}/${entry.name}/${NODE_FILE}`,
+          collection: collection.name,
+          name: entry.name,
         })
         continue
       }
 
-      if (!entry.endsWith('.md')) continue
-      const path = `${collection}/${entry}`
+      if (!entry.name.endsWith('.md')) continue
+      const path = `${collection.name}/${entry.name}`
       let text: string | null = null
       sources.push({
         kind: 'file',
         path,
-        collection,
-        name: entry.slice(0, -'.md'.length),
+        collection: collection.name,
+        name: entry.name.slice(0, -'.md'.length),
         get text() {
           text ??= readFileSync(join(root, path), 'utf8')
           return text

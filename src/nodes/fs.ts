@@ -1,8 +1,43 @@
 /** 실제 파일 시스템 위의 노드 파일 접근. */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { type Dirent, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NodeFiles } from './reader.js'
+
+export interface DirectoryEntry {
+  readonly name: string
+  readonly isDirectory: boolean
+}
+
+/**
+ * 디렉터리 항목을 이름 순으로 읽는다. 점으로 시작하는 항목은 뺀다. 없거나 읽을 수 없으면 빈 목록.
+ *
+ * 항목의 종류는 `readdir` 가 함께 돌려주는 것을 쓴다 — 항목마다 `stat` 을 다시 부르지 않는다.
+ * 심볼릭 링크만은 가리키는 곳을 따라가야 종류를 알 수 있으므로 `stat` 한다.
+ */
+export function readEntries(path: string): DirectoryEntry[] {
+  let entries: Dirent[]
+  try {
+    entries = readdirSync(path, { withFileTypes: true })
+  } catch {
+    return []
+  }
+  return entries
+    .filter((entry) => !entry.name.startsWith('.'))
+    .map((entry) => ({
+      name: entry.name,
+      isDirectory: entry.isSymbolicLink() ? isDirectoryAt(join(path, entry.name)) : entry.isDirectory(),
+    }))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+}
+
+function isDirectoryAt(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
 
 export function nodeFilesAt(root: string): NodeFiles {
   return {
@@ -14,14 +49,9 @@ export function nodeFilesAt(root: string): NodeFiles {
       }
     },
     directories(path) {
-      try {
-        return readdirSync(join(root, path))
-          .filter((entry) => !entry.startsWith('.'))
-          .filter((entry) => statSync(join(root, path, entry)).isDirectory())
-          .sort()
-      } catch {
-        return []
-      }
+      return readEntries(join(root, path))
+        .filter((entry) => entry.isDirectory)
+        .map((entry) => entry.name)
     },
   }
 }

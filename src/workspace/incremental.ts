@@ -14,11 +14,10 @@
  * 보통 한 번도 파싱하지 않고, 조립이나 렌더처럼 트리가 필요한 쪽만 값을 치른다.
  */
 
-import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Diagnostic } from '../diagnostic/index.js'
 import type { Document } from '../model/index.js'
-import { NODE_FILE, type NodeFiles, nodeFilesAt, readNodeTree } from '../nodes/index.js'
+import { NODE_FILE, type NodeFiles, nodeFilesAt, readEntries, readNodeTree } from '../nodes/index.js'
 import { parseDocument } from '../parse/index.js'
 import type { Schema } from '../schema/index.js'
 import {
@@ -86,10 +85,12 @@ function filesOf(root: string, source: DocumentSource): string[] {
 
   const directory = `${source.collection}/${source.name}`
   const paths: string[] = []
+  // 디렉터리마다 한 번만 읽는다. 노드 파일이 있는지와 하위 디렉터리를 같은 목록에서 안다.
   const walk = (relative: string): void => {
-    const node = `${relative}/${NODE_FILE}`
-    if (existsSync(join(root, node))) paths.push(node)
-    for (const child of nodeFilesAt(root).directories(relative)) walk(`${relative}/${child}`)
+    for (const entry of readEntries(join(root, relative))) {
+      if (entry.isDirectory) walk(`${relative}/${entry.name}`)
+      else if (entry.name === NODE_FILE) paths.push(`${relative}/${NODE_FILE}`)
+    }
   }
   walk(directory)
   return paths
