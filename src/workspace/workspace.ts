@@ -13,9 +13,16 @@ import { type DocumentSource, collectSources } from './collect.js'
 import { type RelationGraph, buildGraph } from './graph.js'
 import { type NodeRecord, recordsOf } from './record.js'
 
+/**
+ * 작업공간에 담긴 문서 하나.
+ *
+ * `document` 는 **읽을 때 파싱될 수 있다**. 질의·검사·인덱스는 납작한 기록만으로
+ * 끝나므로, 증분 인덱싱을 타면 트리가 필요한 쪽만 파싱 비용을 치른다.
+ */
 export interface WorkspaceEntry {
-  readonly document: Document
+  readonly id: string
   readonly records: readonly NodeRecord[]
+  readonly document: Document
 }
 
 export type Inverted = ReadonlyMap<string, readonly string[]>
@@ -54,12 +61,18 @@ export class Workspace {
     this.byCollection = invert(this.records, (record) => [record.collection])
   }
 
+  /** 문서 식별자들. 트리를 파싱하지 않는다. */
+  get documentIds(): readonly string[] {
+    return this.entries.map((entry) => entry.id)
+  }
+
+  /** 문서 트리들. 증분 인덱싱을 타면 여기서 파싱이 일어난다. */
   get documents(): readonly Document[] {
     return this.entries.map((entry) => entry.document)
   }
 
   document(id: string): Document | null {
-    return this.entries.find((entry) => entry.document.id === id)?.document ?? null
+    return this.entries.find((entry) => entry.id === id)?.document ?? null
   }
 
   record(address: string): NodeRecord | null {
@@ -119,12 +132,16 @@ export function buildWorkspace(
     if (options.validate !== false) {
       diagnostics.push(...validateDocument(result.document, options.schema))
     }
-    entries.push({ document: result.document, records: recordsOf(result.document) })
+    entries.push({
+      id: result.document.id,
+      document: result.document,
+      records: recordsOf(result.document),
+    })
   }
 
   const duplicated = new Map<string, string[]>()
   for (const entry of entries) {
-    const id = entry.document.id
+    const id = entry.id
     duplicated.set(id, [...(duplicated.get(id) ?? []), entry.document.path])
   }
   for (const [id, paths] of duplicated) {

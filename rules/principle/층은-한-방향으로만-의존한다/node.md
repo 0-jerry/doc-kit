@@ -3,6 +3,7 @@ type: principle
 id: 층은-한-방향으로만-의존한다
 subject:
   - model
+  - store
   - schema
   - parse
   - validate

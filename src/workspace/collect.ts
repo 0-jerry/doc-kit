@@ -1,4 +1,4 @@
-/** 디렉터리에서 문서를 모아 읽는다. 파싱도 검증도 하지 않고 파일만 찾는다. */
+/** 디렉터리에서 문서를 모은다. 파싱도 검증도 하지 않고 파일만 찾는다 — 내용은 필요할 때 읽는다. */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -10,6 +10,7 @@ export interface SourceFile {
   readonly path: string
   readonly collection: string
   readonly name: string
+  /** 처음 읽을 때 파일을 연다. 증분 인덱싱은 캐시가 맞으면 끝내 열지 않는다. */
   readonly text: string
 }
 
@@ -62,12 +63,16 @@ export function collectSources(root: string): DocumentSource[] {
 
       if (!entry.endsWith('.md')) continue
       const path = `${collection}/${entry}`
+      let text: string | null = null
       sources.push({
         kind: 'file',
         path,
         collection,
         name: entry.slice(0, -'.md'.length),
-        text: readFileSync(join(root, path), 'utf8'),
+        get text() {
+          text ??= readFileSync(join(root, path), 'utf8')
+          return text
+        },
       })
     }
   }

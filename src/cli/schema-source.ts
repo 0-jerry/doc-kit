@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Schema, loadPreset, loadSchemaFile } from '../schema/index.js'
 
-export const DEFAULT_SCHEMA_PATH = '.rulekit/schema.yaml'
+export const DEFAULT_SCHEMA_PATH = '.dockit/schema.yaml'
 
 export interface SchemaSource {
   readonly schema: Schema

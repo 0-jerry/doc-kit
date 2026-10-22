@@ -1,11 +1,12 @@
 /**
- * rule-kit 공개 진입점.
+ * doc-kit 공개 진입점.
  *
  * 각 층은 자신의 하위 모듈에서 재수출한다. 이 파일은 조립만 하고
  * 어떤 로직도 갖지 않는다 — 층 경계를 한눈에 보이게 하는 것이 유일한 목적이다.
  */
 
-export const VERSION = '0.2.0-alpha.0'
+/** package.json 과 같아야 한다. 테스트가 둘이 벌어지는 것을 막는다. */
+export const VERSION = '0.0.1'
 
 // L2 문서 객체 모델
 export * from './model/index.js'
@@ -28,6 +29,9 @@ export * from './api/index.js'
 
 // 노드 트리 저장 형태
 export * from './nodes/index.js'
+
+// 내용 주소 객체 저장소
+export * from './store/index.js'
 
 // 문서 간 인덱스와 질의
 export * from './workspace/index.js'

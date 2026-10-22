@@ -171,14 +171,23 @@ function checkSymmetry(records: readonly NodeRecord[], schema: Schema): Diagnost
   return diagnostics
 }
 
-/** REF001 — 같은 진술이 두 곳에 적혀 있는 경우. 링크로 잇는 편이 낫다. */
+/**
+ * REF001 — 같은 진술이 두 곳에 적혀 있는 경우. 링크로 잇는 편이 낫다.
+ *
+ * 판정은 **정규화한 본문**으로 한다. blob 주소로 바꾸고 싶어지지만 그러면 안 된다 —
+ * 주소는 바이트 정확이라 공백·대소문자 차이를 못 잡고, 저장소에는 이미 사라진
+ * 과거 판본의 블록도 들어 있다. 진단이 저장소 상태에 의존하면 거두기가 진단을 바꾼다.
+ */
 function checkDuplicates(records: readonly NodeRecord[]): Diagnostic[] {
   const groups = new Map<string, NodeRecord[]>()
   for (const record of records) {
     if (record.kind !== 'block' || record.role === null) continue
-    const key = `${record.role}:${normalizeText(record.text)}`
-    if (normalizeText(record.text).length < 10) continue
-    groups.set(key, [...(groups.get(key) ?? []), record])
+    const normalized = normalizeText(record.text)
+    if (normalized.length < 10) continue
+    const key = `${record.role}:${normalized}`
+    const bucket = groups.get(key)
+    if (bucket === undefined) groups.set(key, [record])
+    else bucket.push(record)
   }
 
   const diagnostics: Diagnostic[] = []

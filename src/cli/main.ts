@@ -13,27 +13,43 @@ import { serializeDocument } from '../serialize/index.js'
 import { contextFor, query } from '../query/index.js'
 import { renderSite } from '../render/index.js'
 import { splitDocument } from '../nodes/index.js'
-import { loadWorkspace } from '../workspace/index.js'
+import {
+  type Retention,
+  STORE_CONFIG_PATH,
+  collectGarbage,
+  indexWorkspace,
+  loadStoreConfig,
+  loadWorkspace,
+  openStore,
+  storeConfigText,
+} from '../workspace/index.js'
 import { type Parsed, flag, flagList, hasFlag, parseArgv } from './options.js'
-import { resolveSchema } from './schema-source.js'
+import { DEFAULT_SCHEMA_PATH, resolveSchema } from './schema-source.js'
 
-const USAGE = `rulekit — 판단기준 문서를 구조화해 저작·검증·질의한다
+const USAGE = `dockit — 마크다운 문서를 블록 트리로 구조화해 저작·검증·질의한다
 
-  rulekit check   [루트]            규약과 원칙을 검사한다
-  rulekit index   [루트] --out <디렉터리>   인덱스와 그래프를 낸다
-  rulekit query   [루트] --role norm --subject … --topic … --text …
-  rulekit context <파일경로> [--root 루트]  그 파일에 적용되는 판단기준
-  rulekit render  [루트] --out <디렉터리>   정적 규칙집
-  rulekit apply   [루트] --commands <파일|-> [--dry-run]
-  rulekit split   [루트] --document <id> [--dry-run] [--replace]
+  dockit check   [루트]            규약과 원칙을 검사한다
+  dockit index   [루트] --out <디렉터리>   인덱스와 그래프를 낸다
+  dockit query   [루트] --role norm --subject … --topic … --text …
+  dockit context <파일경로> [--root 루트]  그 파일에 적용되는 판단기준
+  dockit render  [루트] --out <디렉터리>   정적 규칙집
+  dockit apply   [루트] --commands <파일|-> [--dry-run]
+  dockit split   [루트] --document <id> [--dry-run] [--replace]
                                     문서를 노드 디렉터리로 흩는다
-  rulekit assemble [루트] --document <id> [--out <파일>]
+  dockit assemble [루트] --document <id> [--out <파일>]
                                     노드 트리를 한 파일로 합친다
+  dockit store   [루트]            객체 저장소를 갱신하고 통계를 낸다
+  dockit log     [루트]            스냅샷 이력
+  dockit cat     <주소> [--root 루트]  객체 하나를 들여다본다. 주소는 앞부분만 줘도 된다
+  dockit gc      [루트] [--dry-run] 작업 트리가 안 쓰는 객체를 거둔다
+  dockit init    [루트] [--retention head|all] [--preset <이름>] [--force]
+                                    규약과 저장 정책을 만든다
 
 공통 옵션
-  --schema <경로>   규약 파일. 생략하면 <루트>/.rulekit/schema.yaml, 없으면 내장 프리셋
+  --schema <경로>   규약 파일. 생략하면 <루트>/.dockit/schema.yaml, 없으면 내장 프리셋
   --json            결과를 JSON 으로
   --strict          경고도 실패로 본다
+  --store <경로>    객체 저장소. 기본은 루트가 속한 프로젝트의 .dockit/store
 `
 
 function write(path: string, content: string): void {
@@ -67,19 +83,30 @@ function reportDiagnostics(parsed: Parsed, diagnostics: ReturnType<typeof loadWo
 function commandCheck(parsed: Parsed): number {
   const { workspace, origin } = openWorkspace(parsed)
   if (!hasFlag(parsed, 'json')) {
-    process.stdout.write(`규약: ${origin} · 문서 ${workspace.documents.length} 개\n\n`)
+    process.stdout.write(`규약: ${origin} · 문서 ${workspace.documentIds.length} 개\n\n`)
   }
   return reportDiagnostics(parsed, workspace.diagnostics)
 }
 
 function commandIndex(parsed: Parsed): number {
-  const { workspace } = openWorkspace(parsed)
-  const out = flag(parsed, 'out') ?? '.rulekit/out'
+  const { workspace, stats } = openIndex(parsed)
+  const out = flag(parsed, 'out') ?? '.dockit/out'
 
+  // 문서 기록이 첫 항목이다. 트리를 파싱하지 않고 머리말을 얻는다.
   for (const entry of workspace.entries) {
+    const head = entry.records[0]
     write(
-      join(out, 'documents', `${entry.document.id}.json`),
-      `${JSON.stringify({ id: entry.document.id, type: entry.document.type, path: entry.document.path, records: entry.records }, null, 2)}\n`,
+      join(out, 'documents', `${entry.id}.json`),
+      `${JSON.stringify(
+        {
+          id: entry.id,
+          type: head?.documentType ?? null,
+          path: head?.path ?? null,
+          records: entry.records,
+        },
+        null,
+        2,
+      )}\n`,
     )
   }
   const inverted = (index: ReadonlyMap<string, readonly string[]>) =>
@@ -89,7 +116,7 @@ function commandIndex(parsed: Parsed): number {
     join(out, 'index.json'),
     `${JSON.stringify(
       {
-        documents: workspace.documents.map((document) => document.id),
+        documents: workspace.documentIds,
         bySubject: inverted(workspace.bySubject),
         byTopic: inverted(workspace.byTopic),
         byRole: inverted(workspace.byRole),
@@ -102,8 +129,190 @@ function commandIndex(parsed: Parsed): number {
   )
   write(join(out, 'graph.json'), `${JSON.stringify({ edges: workspace.graph.edges }, null, 2)}\n`)
 
-  process.stdout.write(`${out} 에 문서 ${workspace.entries.length} 개와 인덱스를 썼습니다\n`)
+  process.stdout.write(
+    `${out} 에 문서 ${workspace.entries.length} 개와 인덱스를 썼습니다 ` +
+      `(캐시 ${stats.cached} · 파싱 ${stats.parsed})\n`,
+  )
   return hasError(workspace.diagnostics) ? 1 : 0
+}
+
+/* ── 객체 저장소 ─────────────────────────────────────────────────────── */
+
+function openIndex(parsed: Parsed, rootDefault = 'rules') {
+  const root = parsed.positional[0] ?? rootDefault
+  const { schema, origin } = resolveSchema(root, flag(parsed, 'schema'))
+  const store = flag(parsed, 'store')
+  const result = indexWorkspace({ root, schema, ...(store === undefined ? {} : { store }) })
+  return { ...result, directory: root, origin }
+}
+
+function commandStore(parsed: Parsed): number {
+  const result = openIndex(parsed)
+  const { stats } = result
+
+  if (hasFlag(parsed, 'json')) {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          snapshot: result.snapshot,
+          parent: result.parent,
+          root: result.root,
+          stats: { ...stats, total: result.store.count() },
+        },
+        null,
+        2,
+      )}\n`,
+    )
+    return hasError(result.workspace.diagnostics) ? 1 : 0
+  }
+
+  const unchanged = result.snapshot !== null && result.snapshot === result.parent
+  process.stdout.write(
+    `스냅샷  ${result.snapshot?.slice(0, 12) ?? '(쓰지 않음)'}${unchanged ? ' (내용 그대로)' : ''}\n` +
+      `뿌리    ${result.root.slice(0, 12)}\n\n` +
+      `문서    ${stats.documents} 개 — 캐시 ${stats.cached} · 파싱 ${stats.parsed}\n` +
+      `파일    읽지 않음 ${stats.files.hits} · 읽음 ${stats.files.misses}\n` +
+      `객체    새로 ${stats.objects.written} · 이미 있어서 건너뜀 ${stats.objects.reused}\n` +
+      `저장소  객체 ${result.store.count()} 개\n`,
+  )
+  return hasError(result.workspace.diagnostics) ? 1 : 0
+}
+
+function commandLog(parsed: Parsed): number {
+  const store = openStore(flag(parsed, 'store'), parsed.positional[0] ?? 'rules')
+  const history = [...store.history()]
+
+  if (hasFlag(parsed, 'json')) {
+    process.stdout.write(`${JSON.stringify(history, null, 2)}\n`)
+    return 0
+  }
+  if (history.length === 0) {
+    process.stdout.write('이력이 없습니다. `dockit store` 를 먼저 돌리세요\n')
+    return 0
+  }
+  for (const { id, snapshot } of history) {
+    const meta = (snapshot.meta ?? {}) as { at?: string; documents?: number }
+    process.stdout.write(
+      `${id.slice(0, 12)}  ${meta.at ?? '(시각 없음)'}  문서 ${meta.documents ?? '?'} 개` +
+        `  뿌리 ${snapshot.root.slice(0, 12)}\n`,
+    )
+  }
+  process.stdout.write(`\n스냅샷 ${history.length} 개\n`)
+  return 0
+}
+
+function commandInit(parsed: Parsed): number {
+  const root = parsed.positional[0] ?? 'rules'
+  const retentionFlag = flag(parsed, 'retention') ?? 'head'
+  if (retentionFlag !== 'head' && retentionFlag !== 'all') {
+    process.stderr.write(`--retention 은 head 또는 all 입니다: ${retentionFlag}\n`)
+    return 2
+  }
+  const retention: Retention = retentionFlag
+  const preset = flag(parsed, 'preset') ?? 'preset/principle'
+
+  // 설정 파일은 루트 바로 위에 둔다 — 규약을 찾는 순서와 같다.
+  const base = join(root, '..')
+  const schemaPath = join(base, DEFAULT_SCHEMA_PATH)
+  const configPath = join(base, STORE_CONFIG_PATH)
+  const force = hasFlag(parsed, 'force')
+
+  const existing = [schemaPath, configPath].filter((path) => existsSync(path))
+  if (existing.length > 0 && !force) {
+    process.stderr.write(`이미 있습니다: ${existing.join(' · ')}\n덮어쓰려면 --force 를 주세요\n`)
+    return 1
+  }
+
+  write(schemaPath, `# doc-kit 저작 규약.\nversion: 1\nextends: ${preset}\n`)
+  write(configPath, storeConfigText(retention))
+
+  process.stdout.write(
+    `${schemaPath} 를 썼습니다 (${preset})\n${configPath} 를 썼습니다 (retention: ${retention})\n`,
+  )
+  if (retention === 'all') {
+    process.stdout.write('\n이력을 전부 보존합니다 — `dockit gc` 는 돌지 않습니다\n')
+  } else {
+    process.stdout.write(
+      '\nHEAD 에서 닿는 것만 남깁니다. `dockit gc` 가 나머지를 거두고,\n' +
+        '지운 이력은 기록하지 않습니다 — 되돌릴 수 없습니다\n',
+    )
+  }
+  return 0
+}
+
+function commandGc(parsed: Parsed): number {
+  const root = parsed.positional[0] ?? 'rules'
+  const { schema } = resolveSchema(root, flag(parsed, 'schema'))
+  const config = loadStoreConfig(root)
+  const dryRun = hasFlag(parsed, 'dry-run')
+
+  const result = collectGarbage({
+    root,
+    schema,
+    ...(flag(parsed, 'store') === undefined ? {} : { store: flag(parsed, 'store')! }),
+    retention: config.retention,
+    dryRun,
+  })
+
+  if (hasFlag(parsed, 'json')) {
+    process.stdout.write(`${JSON.stringify({ ...result, origin: config.origin }, null, 2)}\n`)
+    return 0
+  }
+
+  if (result.skipped) {
+    process.stdout.write(
+      `정책: ${result.retention} (${config.origin})\n\n` +
+        '이력을 전부 보존하는 프로젝트입니다. 거두지 않습니다.\n' +
+        `바꾸려면 ${STORE_CONFIG_PATH} 의 retention 을 head 로 두세요\n`,
+    )
+    return 0
+  }
+
+  process.stdout.write(
+    `정책: ${result.retention} (${config.origin})\n` +
+      `뿌리: ${result.roots.map((id) => id.slice(0, 12)).join(' ') || '(HEAD 없음)'}\n\n` +
+      `객체    ${result.objects.before} → ${result.objects.kept} (거둠 ${result.objects.removed})\n` +
+      `파생    ${result.derived.before} → ${result.derived.kept} (거둠 ${result.derived.removed})\n`,
+  )
+  if (dryRun) process.stdout.write('\n--dry-run 이므로 지우지 않았습니다\n')
+  return 0
+}
+
+function commandCat(parsed: Parsed): number {
+  const prefix = parsed.positional[0]
+  if (prefix === undefined) {
+    process.stderr.write('객체 주소를 주세요\n')
+    return 2
+  }
+  const store = openStore(flag(parsed, 'store'), flag(parsed, 'root') ?? 'rules')
+  // `log` 와 `store` 는 앞 12 자만 보여 준다. 그것을 그대로 받아야 한다.
+  const matches = store.matching(prefix)
+  if (matches.length > 1) {
+    process.stderr.write(
+      `주소가 여럿과 겹칩니다: ${prefix}\n${matches.map((id) => `  ${id}`).join('\n')}\n`,
+    )
+    return 2
+  }
+  const id = matches[0]
+  const object = id === undefined ? null : store.read(id)
+  if (id === undefined || object === null) {
+    process.stderr.write(`그런 객체가 없습니다: ${prefix}\n`)
+    return 2
+  }
+
+  const body =
+    object.type === 'blob'
+      ? store.blob(id)
+      : object.type === 'tree'
+        ? store.tree(id)
+        : store.snapshot(id)
+
+  if (hasFlag(parsed, 'json') || object.type !== 'blob') {
+    process.stdout.write(`${JSON.stringify({ type: object.type, body }, null, 2)}\n`)
+    return 0
+  }
+  process.stdout.write(`${body as string}\n`)
+  return 0
 }
 
 function commandQuery(parsed: Parsed): number {
@@ -152,7 +361,7 @@ function commandContext(parsed: Parsed): number {
 
 function commandRender(parsed: Parsed): number {
   const { workspace } = openWorkspace(parsed)
-  const out = flag(parsed, 'out') ?? '.rulekit/site'
+  const out = flag(parsed, 'out') ?? '.dockit/site'
   const files = renderSite(workspace, {
     ...(flag(parsed, 'title') === undefined ? {} : { title: flag(parsed, 'title')! }),
   })
@@ -283,6 +492,11 @@ const COMMANDS: Record<string, (parsed: Parsed) => number> = {
   apply: commandApply,
   split: commandSplit,
   assemble: commandAssemble,
+  store: commandStore,
+  log: commandLog,
+  cat: commandCat,
+  gc: commandGc,
+  init: commandInit,
 }
 
 export function run(argv: readonly string[]): number {

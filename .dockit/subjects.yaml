@@ -1,5 +1,6 @@
 # 대상 어휘와 그것이 덮는 경로. 도구는 경로 규칙을 모르고 이 매핑만 해석한다.
 model: ['src/model/**']
+store: ['src/store/**']
 schema: ['src/schema/**']
 parse: ['src/parse/**', 'src/serialize/**']
 validate: ['src/validate/**']

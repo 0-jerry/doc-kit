@@ -196,7 +196,3 @@ export function fragmentEquals(a: Fragment | null, b: Fragment | null): boolean 
   }
   return false
 }
-
-export function addressEquals(a: Address, b: Address): boolean {
-  return a.document === b.document && fragmentEquals(a.fragment, b.fragment)
-}

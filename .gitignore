@@ -1,6 +1,7 @@
 node_modules
 dist
-.rulekit/out
-.rulekit/site
+.dockit/out
+.dockit/site
+.dockit/store
 .code-review-graph
 .DS_Store
