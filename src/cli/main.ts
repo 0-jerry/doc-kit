@@ -57,6 +57,10 @@ function write(path: string, content: string): void {
   writeFileSync(path, content, 'utf8')
 }
 
+function writeJson(value: unknown): void {
+  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
+}
+
 function openWorkspace(parsed: Parsed, rootDefault = 'rules') {
   const root = parsed.command === 'context' ? (flag(parsed, 'root') ?? rootDefault)
     : (parsed.positional[0] ?? rootDefault)
@@ -92,10 +96,16 @@ function commandIndex(parsed: Parsed): number {
   const { workspace, stats } = openIndex(parsed)
   const out = flag(parsed, 'out') ?? '.dockit/out'
 
+  const written: string[] = []
+  const emit = (path: string, content: string): void => {
+    write(path, content)
+    written.push(path)
+  }
+
   // 문서 기록이 첫 항목이다. 트리를 파싱하지 않고 머리말을 얻는다.
   for (const entry of workspace.entries) {
     const head = entry.records[0]
-    write(
+    emit(
       join(out, 'documents', `${entry.id}.json`),
       `${JSON.stringify(
         {
@@ -112,7 +122,7 @@ function commandIndex(parsed: Parsed): number {
   const inverted = (index: ReadonlyMap<string, readonly string[]>) =>
     Object.fromEntries([...index].sort(([a], [b]) => a.localeCompare(b)))
 
-  write(
+  emit(
     join(out, 'index.json'),
     `${JSON.stringify(
       {
@@ -127,8 +137,18 @@ function commandIndex(parsed: Parsed): number {
       2,
     )}\n`,
   )
-  write(join(out, 'graph.json'), `${JSON.stringify({ edges: workspace.graph.edges }, null, 2)}\n`)
+  emit(join(out, 'graph.json'), `${JSON.stringify({ edges: workspace.graph.edges }, null, 2)}\n`)
 
+  if (hasFlag(parsed, 'json')) {
+    writeJson({
+      out,
+      documents: workspace.entries.length,
+      written,
+      stats: { cached: stats.cached, parsed: stats.parsed },
+      diagnostics: workspace.diagnostics,
+    })
+    return hasError(workspace.diagnostics) ? 1 : 0
+  }
   process.stdout.write(
     `${out} 에 문서 ${workspace.entries.length} 개와 인덱스를 썼습니다 ` +
       `(캐시 ${stats.cached} · 파싱 ${stats.parsed})\n`,
@@ -225,6 +245,11 @@ function commandInit(parsed: Parsed): number {
 
   write(schemaPath, `# doc-kit 저작 규약.\nversion: 1\nextends: ${preset}\n`)
   write(configPath, storeConfigText(retention))
+
+  if (hasFlag(parsed, 'json')) {
+    writeJson({ written: [schemaPath, configPath], preset, retention })
+    return 0
+  }
 
   process.stdout.write(
     `${schemaPath} 를 썼습니다 (${preset})\n${configPath} 를 썼습니다 (retention: ${retention})\n`,
@@ -365,7 +390,12 @@ function commandRender(parsed: Parsed): number {
   const files = renderSite(workspace, {
     ...(flag(parsed, 'title') === undefined ? {} : { title: flag(parsed, 'title')! }),
   })
-  for (const file of files) write(join(out, file.path), file.content)
+  const written = files.map((file) => join(out, file.path))
+  files.forEach((file, index) => write(written[index]!, file.content))
+  if (hasFlag(parsed, 'json')) {
+    writeJson({ out, written })
+    return 0
+  }
   process.stdout.write(`${out} 에 ${files.length} 개 파일을 썼습니다\n`)
   return 0
 }
@@ -434,27 +464,46 @@ function commandSplit(parsed: Parsed): number {
   }
 
   const files = splitDocument(document, workspace.schema)
+  const json = hasFlag(parsed, 'json')
   if (hasFlag(parsed, 'dry-run')) {
+    if (json) {
+      writeJson({ document: document.id, dryRun: true, written: [], files, original: null })
+      return 0
+    }
     for (const file of files) {
       process.stdout.write(`\n--- ${file.path} (쓰지 않음) ---\n${file.content}`)
     }
     return 0
   }
 
-  for (const file of files) write(join(root, file.path), file.content)
-  process.stdout.write(`${join(root, dirname(files[0]!.path))} 에 노드 ${files.length} 개를 썼습니다\n`)
+  const written = files.map((file) => join(root, file.path))
+  files.forEach((file, index) => write(written[index]!, file.content))
 
   // 원본 단일 파일이 남아 있으면 같은 식별자를 가진 문서가 둘이 된다.
   const original = join(root, `${document.id}.md`)
-  if (!existsSync(original)) return 0
-  if (!hasFlag(parsed, 'replace')) {
+  const left = existsSync(original)
+  const replace = hasFlag(parsed, 'replace')
+  if (left && replace) rmSync(original)
+
+  if (json) {
+    writeJson({
+      document: document.id,
+      dryRun: false,
+      written,
+      original: left ? { path: original, removed: replace } : null,
+    })
+    return left && !replace ? 1 : 0
+  }
+
+  process.stdout.write(`${join(root, dirname(files[0]!.path))} 에 노드 ${files.length} 개를 썼습니다\n`)
+  if (!left) return 0
+  if (!replace) {
     process.stdout.write(
       `\n${original} 이 그대로 남아 있습니다. 같은 식별자를 가진 문서가 둘이 됩니다.\n` +
         '지우려면 --replace 를 주세요\n',
     )
     return 1
   }
-  rmSync(original)
   process.stdout.write(`${original} 을 지웠습니다\n`)
   return 0
 }
@@ -474,11 +523,15 @@ function commandAssemble(parsed: Parsed): number {
 
   const text = serializeDocument(document, { schema: workspace.schema })
   const out = flag(parsed, 'out')
+  if (out !== undefined) write(out, text)
+  if (hasFlag(parsed, 'json')) {
+    writeJson({ document: document.id, written: out === undefined ? [] : [out], content: text })
+    return 0
+  }
   if (out === undefined) {
     process.stdout.write(text)
     return 0
   }
-  write(out, text)
   process.stdout.write(`${out} 를 썼습니다\n`)
   return 0
 }
