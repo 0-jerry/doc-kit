@@ -88,7 +88,7 @@ test('저장소는 외부 런타임 의존성을 갖지 않는다 — node 기�
   }
 })
 
-test('저장소를 아는 파일은 열거된 셋뿐이다', () => {
+test('저장소를 아는 파일은 열거된 넷뿐이다', () => {
   /*
    * 바이트와 문서의 경계를 지키는 울타리다. 늘어나는 것 자체가 문제는 아니지만,
    * 여기에 이름을 적지 않고 늘어나는 것이 문제다 — 적으면서 한 번 더 생각하게 한다.
@@ -96,6 +96,7 @@ test('저장소를 아는 파일은 열거된 셋뿐이다', () => {
    *   encode       문서를 객체로 옮긴다 (이 변환을 아는 유일한 곳)
    *   incremental  지문으로 캐시를 판정한다
    *   gc           주소의 도달성으로 거둔다
+   *   diff         두 스냅샷의 tree 를 맞춰 내려간다 (meta 의 뜻은 encode 가 읽어 준다)
    */
   const importers = sources('.')
     .filter((file) => !file.startsWith('store/') && !file.startsWith('cli/') && file !== 'index.ts')
@@ -103,6 +104,7 @@ test('저장소를 아는 파일은 열거된 셋뿐이다', () => {
       specifiers(readFileSync(join(SRC, file), 'utf8')).some((s) => s.includes('store/')),
     )
   assert.deepEqual(importers.sort(), [
+    'workspace/diff.ts',
     'workspace/encode.ts',
     'workspace/gc.ts',
     'workspace/incremental.ts',

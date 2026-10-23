@@ -233,7 +233,7 @@ export function indexWorkspace(options: IndexOptions): IndexResult {
       cached,
       parsed: sources.length - cached,
       files: { ...stat.stats },
-      objects: { ...store.stats },
+      objects: { written: store.stats.written, reused: store.stats.reused },
     },
   }
 }

@@ -38,7 +38,7 @@ test('같은 내용은 두 번 쓰이지 않는다', () => {
     const first = store.writeBlob('같은 진술')
     const second = store.writeBlob('같은 진술')
     assert.equal(first, second)
-    assert.deepEqual(store.stats, { written: 1, reused: 1 })
+    assert.deepEqual(store.stats, { written: 1, reused: 1, read: 0 })
     assert.equal(store.count(), 1)
   } finally {
     rmSync(directory, { recursive: true, force: true })

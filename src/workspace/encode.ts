@@ -22,7 +22,7 @@ import {
   type Document,
   Section,
 } from '../model/index.js'
-import { type ObjectId, type ObjectStore, type TreeEntry } from '../store/index.js'
+import { type ObjectId, type ObjectStore, type Tree, type TreeEntry } from '../store/index.js'
 
 /** 보조데이터의 정규형. 빈 것은 떨어뜨려 같은 뜻이면 같은 바이트가 되게 한다. */
 function auxMeta(aux: Aux): Record<string, unknown> | undefined {
@@ -111,4 +111,67 @@ export function writeRoot(
     }))
 
   return store.writeTree({ entries })
+}
+
+/* ── 읽기 쪽 ─────────────────────────────────────────────────────────── */
+/*
+ * 객체를 다시 문서 쪽 말로 읽는다. 쓰는 함수와 같은 파일에 두어, 형식을 아는 곳이
+ * 하나로 남게 한다 — 비교(`diff.ts`)는 meta 의 키 이름을 직접 읽지 않는다.
+ * 보조데이터는 뜻을 풀지 않고 정규형 그대로 돌려준다. 같은지만 보면 되기 때문이다.
+ */
+
+function record(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+export interface DocumentMeta {
+  readonly id: string
+  readonly type: string
+  readonly aux: unknown
+}
+
+export interface SectionMeta {
+  readonly key: string
+  readonly heading: string
+  readonly stableId: string | null
+  readonly aux: unknown
+}
+
+export interface BlockMeta {
+  readonly form: string
+  /** 항목 이름. 블록에서는 안정 식별자이고, 없으면 null. */
+  readonly stableId: string | null
+  readonly aux: unknown
+}
+
+/** 문서 tree 의 meta. 문서 tree 가 아니면 null. */
+export function documentMetaOf(tree: Tree): DocumentMeta | null {
+  const meta = record(tree.meta)
+  if (meta === null || typeof meta.id !== 'string' || typeof meta.type !== 'string') return null
+  return { id: meta.id, type: meta.type, aux: meta.aux ?? null }
+}
+
+/** 섹션 tree 의 meta. 섹션 tree 가 아니면 null. */
+export function sectionMetaOf(tree: Tree): SectionMeta | null {
+  const meta = record(tree.meta)
+  if (meta === null || typeof meta.key !== 'string' || typeof meta.heading !== 'string') return null
+  return {
+    key: meta.key,
+    heading: meta.heading,
+    stableId: typeof meta.stableId === 'string' ? meta.stableId : null,
+    aux: meta.aux ?? null,
+  }
+}
+
+/** 블록 항목의 meta. 블록이 아닌 항목이면 null. */
+export function blockMetaOf(entry: TreeEntry): BlockMeta | null {
+  if (entry.kind !== 'blob') return null
+  const meta = record(entry.meta)
+  return {
+    form: typeof meta?.form === 'string' ? meta.form : '',
+    stableId: entry.name === '' ? null : entry.name,
+    aux: meta?.aux ?? null,
+  }
 }

@@ -43,6 +43,8 @@ export interface StoreStats {
   written: number
   /** 이미 있어서 쓰지 않은 객체 수. 공유된 만큼이다. */
   reused: number
+  /** 디스크에서 연 객체 수. 비교가 바뀐 곳만 읽는지 재는 데 쓴다. */
+  read: number
 }
 
 export interface ObjectStoreOptions {
@@ -55,7 +57,7 @@ export interface ObjectStoreOptions {
 
 export class ObjectStore {
   readonly directory: string
-  readonly stats: StoreStats = { written: 0, reused: 0 }
+  readonly stats: StoreStats = { written: 0, reused: 0, read: 0 }
   readonly dryRun: boolean
   private readonly pending = new Map<ObjectId, { type: ObjectType; payload: Uint8Array }>()
   private pendingHead: ObjectId | null = null
@@ -101,7 +103,9 @@ export class ObjectStore {
     const pending = this.pending.get(id)
     if (pending !== undefined) return pending
     try {
-      return unframe(inflateSync(readFileSync(this.pathOf(id))))
+      const bytes = readFileSync(this.pathOf(id))
+      this.stats.read += 1
+      return unframe(inflateSync(bytes))
     } catch {
       // 없거나 망가진 객체. 둘 다 "읽을 수 없다" 로 다룬다 — 끊긴 링크와 같다.
       return null

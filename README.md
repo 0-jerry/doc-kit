@@ -213,6 +213,15 @@ dockit gc   rules --dry-run           # 무엇이 거둬질지만 본다
 dockit gc   rules
 ```
 
+스냅샷 둘을 비교하면 바뀐 노드를 주소로 낸다. 주소가 같은 하위 트리는 열지 않으므로 비용이
+문서 수가 아니라 바뀐 곳에 비례하고, 블록 하나를 끼워도 뒤 블록들이 바뀐 것으로 나오지 않는다.
+`head` 정책에서는 거두기 전까지 쌓인 스냅샷끼리만 비교할 수 있다.
+
+```bash
+dockit diff 3f2a9c1e04b7 --root rules            # 그 스냅샷과 HEAD
+dockit diff 3f2a9c1e04b7 be4eea285508 --patch    # 본문이 바뀐 블록에 줄 차이를 붙인다
+```
+
 ```
 정책: head (.dockit/store.yaml)
 뿌리: cbb59cfefd1d
@@ -267,6 +276,8 @@ dockit store   [루트]                           객체 저장소를 갱신하�
 dockit log     [루트]                           스냅샷 이력
 dockit cat     <주소>                           객체 하나를 들여다본다
 dockit gc      [루트] [--dry-run]               작업 트리가 안 쓰는 객체를 거둔다
+dockit diff    <앞> [<뒤>] [--patch] [--exit-code]
+                                                 두 스냅샷 사이에 바뀐 문서·노드·블록
 dockit init    [루트] [--retention head|all] [--preset <이름>] [--force]
                                                  규약과 저장 정책을 만든다
 ```

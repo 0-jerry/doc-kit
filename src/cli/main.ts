@@ -16,7 +16,10 @@ import { splitDocument } from '../nodes/index.js'
 import {
   type Retention,
   STORE_CONFIG_PATH,
+  type Change,
   collectGarbage,
+  diffSnapshots,
+  findSnapshot,
   indexWorkspace,
   loadStoreConfig,
   loadWorkspace,
@@ -42,6 +45,8 @@ const USAGE = `dockit — 마크다운 문서를 블록 트리로 구조화해 �
   dockit log     [루트]            스냅샷 이력
   dockit cat     <주소> [--root 루트]  객체 하나를 들여다본다. 주소는 앞부분만 줘도 된다
   dockit gc      [루트] [--dry-run] 작업 트리가 안 쓰는 객체를 거둔다
+  dockit diff    <앞> [<뒤>] [--root 루트] [--patch] [--exit-code]
+                                    두 스냅샷을 비교한다. <뒤> 를 생략하면 HEAD
   dockit init    [루트] [--retention head|all] [--preset <이름>] [--force]
                                     규약과 저장 정책을 만든다
 
@@ -351,6 +356,72 @@ function commandCat(parsed: Parsed): number {
   return 0
 }
 
+/** 종류 이름. 한글 두 자와 세 자의 화면 폭을 맞춰 둔다. */
+const CHANGE_LABEL: Record<Change['kind'], string> = {
+  added: '생김  ',
+  removed: '사라짐',
+  modified: '바뀜  ',
+  moved: '옮김  ',
+}
+
+const PART_LABEL: Record<NonNullable<Change['changed']>[number], string> = {
+  body: '본문',
+  aux: '보조데이터',
+  heading: '제목',
+  type: '타입',
+}
+
+/** 같은 문서 안이면 `#조각` 만 보인다. */
+function relativeTo(address: string, other: string): string {
+  const document = (value: string) => value.split('#')[0]
+  return document(address) === document(other) && other.includes('#')
+    ? other.slice(other.indexOf('#'))
+    : other
+}
+
+function commandDiff(parsed: Parsed): number {
+  const [fromArg, toArg] = parsed.positional
+  if (fromArg === undefined) return fail(parsed, 2, '비교할 스냅샷 주소를 주세요\n')
+  const store = openStore(flag(parsed, 'store'), flag(parsed, 'root') ?? 'rules')
+
+  const from = findSnapshot(store, fromArg)
+  if (!from.ok) return fail(parsed, 2, `${from.error}\n`)
+  let to: ReturnType<typeof findSnapshot>
+  if (toArg === undefined) {
+    const head = store.head()
+    if (head === null) return fail(parsed, 2, '이력이 없습니다. `dockit store` 를 먼저 돌리세요\n')
+    to = findSnapshot(store, head)
+  } else {
+    to = findSnapshot(store, toArg)
+  }
+  if (!to.ok) return fail(parsed, 2, `${to.error}\n`)
+
+  const changes = diffSnapshots(store, from.snapshot, to.snapshot, { patch: hasFlag(parsed, 'patch') })
+  const code = hasFlag(parsed, 'exit-code') && changes.length > 0 ? 1 : 0
+
+  if (hasFlag(parsed, 'json')) {
+    writeJson({ from: from.id, to: to.id, changes })
+    return code
+  }
+
+  const isHead = to.id === store.head()
+  process.stdout.write(`${from.id.slice(0, 12)} → ${to.id.slice(0, 12)}${isHead ? ' (HEAD)' : ''}\n\n`)
+  for (const change of changes) {
+    const details = [
+      ...(change.before === undefined ? [] : [`← ${relativeTo(change.address, change.before)}`]),
+      ...(change.changed ?? []).map((part) => PART_LABEL[part]),
+    ]
+    process.stdout.write(
+      `${CHANGE_LABEL[change.kind]}  ${change.address}${details.length === 0 ? '' : `  ${details.join(' · ')}`}\n`,
+    )
+    if (change.patch !== undefined) {
+      process.stdout.write(`${change.patch.replace(/^/gm, '        ')}\n`)
+    }
+  }
+  process.stdout.write(changes.length === 0 ? '차이 없음\n' : `\n${changes.length} 개\n`)
+  return code
+}
+
 function commandQuery(parsed: Parsed): number {
   const { workspace } = openWorkspace(parsed)
   const hits = query(workspace, {
@@ -562,6 +633,7 @@ const COMMANDS: Record<string, (parsed: Parsed) => number> = {
   log: commandLog,
   cat: commandCat,
   gc: commandGc,
+  diff: commandDiff,
   init: commandInit,
 }
 
