@@ -42,7 +42,7 @@ const USAGE = `dockit — 마크다운 문서를 블록 트리로 구조화해 �
   dockit assemble [루트] --document <id> [--out <파일>]
                                     노드 트리를 한 파일로 합친다
   dockit store   [루트]            객체 저장소를 갱신하고 통계를 낸다
-  dockit log     [루트]            스냅샷 이력
+  dockit log     [루트 | --root 루트]  스냅샷 이력
   dockit cat     <주소> [--root 루트]  객체 하나를 들여다본다. 주소는 앞부분만 줘도 된다
   dockit gc      [루트] [--dry-run] 작업 트리가 안 쓰는 객체를 거둔다
   dockit diff    <앞> [<뒤>] [--root 루트] [--patch] [--exit-code]
@@ -214,7 +214,8 @@ function commandStore(parsed: Parsed): number {
 }
 
 function commandLog(parsed: Parsed): number {
-  const store = openStore(flag(parsed, 'store'), parsed.positional[0] ?? 'rules')
+  // cat · diff 처럼 --root 도 받는다. 저장소를 읽는 명령 셋이 같은 꼴로 루트를 받게 한다.
+  const store = openStore(flag(parsed, 'store'), flag(parsed, 'root') ?? parsed.positional[0] ?? 'rules')
   const history = [...store.history()]
 
   if (hasFlag(parsed, 'json')) {

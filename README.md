@@ -273,10 +273,10 @@ dockit assemble [루트] --document <id> [--out <파일>]
                                                  노드 트리를 한 파일로 합친다
 
 dockit store   [루트]                           객체 저장소를 갱신하고 통계를 낸다
-dockit log     [루트]                           스냅샷 이력
-dockit cat     <주소>                           객체 하나를 들여다본다
+dockit log     [루트 | --root 루트]             스냅샷 이력
+dockit cat     <주소> [--root 루트]             객체 하나를 들여다본다
 dockit gc      [루트] [--dry-run]               작업 트리가 안 쓰는 객체를 거둔다
-dockit diff    <앞> [<뒤>] [--patch] [--exit-code]
+dockit diff    <앞> [<뒤>] [--root 루트] [--patch] [--exit-code]
                                                  두 스냅샷 사이에 바뀐 문서·노드·블록
 dockit init    [루트] [--retention head|all] [--preset <이름>] [--force]
                                                  규약과 저장 정책을 만든다

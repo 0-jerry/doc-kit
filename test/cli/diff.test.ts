@@ -99,3 +99,15 @@ test('R15.14 — 차이가 있어도 0, --exit-code 면 1, 실패는 2', () => {
     cleanup()
   }
 })
+
+test('R13.4 — log 도 --root 로 루트를 받는다', () => {
+  const { root, first, cleanup } = project()
+  try {
+    const byFlag = capture(['log', '--root', root, '--json']).json
+    const byPosition = capture(['log', root, '--json']).json
+    assert.deepEqual(byFlag, byPosition)
+    assert.equal(byFlag.at(-1).id, first)
+  } finally {
+    cleanup()
+  }
+})
