@@ -133,6 +133,19 @@ test('REF002 — 가리키는 곳이 없는 링크는 오류', () => {
   assert.ok(codes.includes('REF002'))
 })
 
+test('REF006 — 위치 주소로 건 링크는 가리키는 곳이 있어도 오류 (R16.9)', () => {
+  const 위치 = source(
+    '위치',
+    '---\ntype: principle\nid: 위치\nrefines: principle/불변식#norm/0\n---\n\n## 기준\n\n진술.\n\n## 근거\n\n설명.\n',
+  )
+  const diagnostics = build([불변식, 위치]).diagnostics
+  assert.ok(diagnostics.some((item) => item.code === 'REF006'))
+  // 가리키는 곳은 있으므로 REF002 는 나지 않는다 — 그래서 따로 막아야 한다
+  assert.ok(!diagnostics.some((item) => item.code === 'REF002'))
+  // 안정 주소와 문서 주소는 괜찮다
+  assert.ok(!build([불변식, 로깅]).diagnostics.some((item) => item.code === 'REF006'))
+})
+
 test('REF003 — 비순환 관계의 순환은 오류', () => {
   const a = source(
     'a',

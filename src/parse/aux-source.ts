@@ -19,9 +19,13 @@ import type { DirectiveEntry } from './directive.js'
  * - `id` 노드의 안정 식별자 (문서에서는 문서 이름)
  * - `type` 문서 타입
  * - `title` 노드의 제목. 노드 파일에는 제목 줄이 없으므로 여기에 적는다
- * - `children` 하위 노드 인덱스. 순서가 곧 문서 순서다
+ * - `order` 형제 사이의 자리. 분수 색인이다 — 노드 파일이 스스로 자기 자리를 안다
+ * - `children` 옛 하위 노드 인덱스. 읽기만 한다 (NODE007)
  */
-const RESERVED = new Set(['id', 'type', 'title', 'children'])
+const RESERVED = new Set(['id', 'type', 'title', 'order', 'children'])
+
+/** `order` 의 형식. `0` 으로 끝나면 바로 앞에 끼울 자리가 없으므로 받지 않는다. */
+const ORDER_KEY = /^[0-9a-z]*[1-9a-z]$/
 
 const LIFECYCLE_KEYS = new Set(['status', 'since', 'until', 'level'])
 
@@ -96,6 +100,8 @@ export function buildAux(entries: readonly DirectiveEntry[], schema: Schema): Au
           continue
         }
         stableId = first
+      } else if (entry.key === 'order' && !ORDER_KEY.test(first)) {
+        problems.push(`order 는 0-9 a-z 로 적고 0 으로 끝날 수 없습니다: ${first}`)
       } else {
         reserved.set(entry.key, [first])
       }

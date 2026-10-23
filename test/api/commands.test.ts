@@ -182,6 +182,23 @@ test('relation.link — 안정 식별자가 없는 노드에서는 걸 수 없�
   assert.equal(result.diagnostics[0]?.code, 'CMD016')
 })
 
+test('relation.link — 다른 문서라도 위치 주소로는 걸 수 없다 (R16.9)', () => {
+  const result = applyCommand(
+    read(),
+    { op: 'relation.link', at: 'core', kind: 'refines', target: 'principle/다른#norm/0' },
+    options,
+  )
+  assert.equal(result.ok, false)
+  assert.equal(result.diagnostics[0]?.code, 'CMD016')
+
+  const whole = applyCommand(
+    read(),
+    { op: 'relation.link', at: 'core', kind: 'refines', target: 'principle/다른' },
+    options,
+  )
+  assert.equal(whole.ok, true)
+})
+
 test('relation.link — 걸고 끊는다', () => {
   const linked = applyCommand(
     read(),

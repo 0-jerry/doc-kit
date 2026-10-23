@@ -5,14 +5,14 @@
  * 이 파일은 실행하지 않는다 — 실행은 `bin.ts` 가 한다. 그래야 테스트가 import 할 수 있다.
  */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { applyCommands } from '../api/index.js'
 import { countBySeverity, formatDiagnostic, hasError } from '../diagnostic/index.js'
 import { serializeDocument } from '../serialize/index.js'
 import { contextFor, query } from '../query/index.js'
 import { renderSite } from '../render/index.js'
-import { splitDocument } from '../nodes/index.js'
+import { NODE_FILE, nodeFilesAt, planNodeWrites, splitDocument } from '../nodes/index.js'
 import {
   type Retention,
   STORE_CONFIG_PATH,
@@ -69,6 +69,16 @@ function writeAll(base: string, files: readonly { path: string; content: string 
     write(path, file.content)
     return path
   })
+}
+
+/** 파일을 지우고, 그 때문에 비게 된 디렉터리를 `base` 까지 거슬러 치운다. */
+function removeNodeFile(base: string, path: string): void {
+  rmSync(join(base, path), { force: true })
+  for (let directory = dirname(path); directory !== '.' && directory !== ''; directory = dirname(directory)) {
+    const absolute = join(base, directory)
+    if (!existsSync(absolute) || readdirSync(absolute).length > 0) return
+    rmdirSync(absolute)
+  }
 }
 
 /** 사람도 읽을 수 있게 들여 쓴 JSON 한 덩이. 끝에 줄바꿈이 붙는다. */
@@ -510,19 +520,36 @@ function commandApply(parsed: Parsed): number {
   }
   if (!result.ok || result.document === null) return 1
 
+  // 노드 디렉터리 문서는 노드 파일들로 되쓴다. 뜻이 바뀐 노드만 쓰여야 다른 브랜치와 충돌하지 않는다.
+  const tree = target !== null && target.path.endsWith(`/${NODE_FILE}`)
+  const plan = tree
+    ? planNodeWrites(target!, result.document, workspace.schema, nodeFilesAt(root))
+    : {
+        write: [
+          { path: result.document.path, content: serializeDocument(result.document, { schema: workspace.schema }) },
+        ],
+        remove: [],
+      }
+
   if (hasFlag(parsed, 'dry-run')) {
     if (!hasFlag(parsed, 'json')) {
-      process.stdout.write(`\n--- ${result.document.path} (쓰지 않음) ---\n`)
-      process.stdout.write(serializeDocument(result.document, { schema: workspace.schema }))
+      for (const file of plan.write) {
+        process.stdout.write(`\n--- ${file.path} (쓰지 않음) ---\n${file.content}`)
+      }
+      for (const path of plan.remove) process.stdout.write(`\n${path} 을 지울 것입니다 (쓰지 않음)\n`)
     }
     return hasError(result.diagnostics) ? 1 : 0
   }
 
-  write(
-    join(root, result.document.path),
-    serializeDocument(result.document, { schema: workspace.schema }),
-  )
-  process.stdout.write(`${join(root, result.document.path)} 를 썼습니다\n`)
+  const quiet = hasFlag(parsed, 'json')
+  for (const file of plan.write) {
+    write(join(root, file.path), file.content)
+    if (!quiet) process.stdout.write(`${join(root, file.path)} 를 썼습니다\n`)
+  }
+  for (const path of plan.remove) {
+    removeNodeFile(root, path)
+    if (!quiet) process.stdout.write(`${join(root, path)} 를 지웠습니다\n`)
+  }
   return hasError(result.diagnostics) ? 1 : 0
 }
 

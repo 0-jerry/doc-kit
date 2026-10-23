@@ -1,6 +1,6 @@
 /**
  * 노드 트리 저장 형태. 노드 하나가 디렉터리 하나이고,
- * 부모는 자식을 소유하지 않고 이름만 인덱스로 들고 있다.
+ * 부모는 자식을 소유하지 않는다 — 하위 디렉터리가 곧 인덱스다.
  */
 
 import assert from 'node:assert/strict'
@@ -62,7 +62,7 @@ function original() {
   }).document!
 }
 
-/** 메모리 위의 노드 파일 모음. */
+/** 메모리 위의 노드 파일 모음. 파일이 하나라도 있는 하위 디렉터리를 디렉터리로 본다. */
 function store(files: readonly NodeFile[]): NodeFiles {
   const map = new Map(files.map((file) => [file.path, file.content]))
   return {
@@ -73,7 +73,7 @@ function store(files: readonly NodeFile[]): NodeFiles {
       for (const path of map.keys()) {
         if (!path.startsWith(prefix)) continue
         const rest = path.slice(prefix.length).split('/')
-        if (rest.length === 2 && rest[1] === NODE_FILE) found.add(rest[0]!)
+        if (rest.length >= 2) found.add(rest[0]!)
       }
       return [...found]
     },
@@ -95,17 +95,23 @@ test('제목마다 노드 디렉터리 하나가 생긴다', () => {
   ])
 })
 
-test('부모는 자식 내용 대신 이름만 인덱스로 갖는다', () => {
+test('부모는 자식의 내용도 이름도 갖지 않는다 (R16.1)', () => {
   const files = splitDocument(original(), schema)
   const root = files[0]!.content
-  assert.match(root, /children:\n  - norm\n  - rationale\n  - example\n/)
+  assert.ok(!root.includes('children:'))
   // 자식의 내용은 루트에 들어 있지 않다
   assert.ok(!root.includes('불변식은 생성자에서 검증한다'))
 
   const rationale = files.find((file) => file.path.endsWith(`rationale/${NODE_FILE}`))!.content
-  assert.match(rationale, /children:\n  - 더-좁은-경우\n/)
+  assert.ok(!rationale.includes('children:'))
   assert.ok(rationale.includes('유효하지 않은 상태가 존재할 수 없다.'))
   assert.ok(!rationale.includes('값 객체는 더 그렇다'))
+})
+
+test('규약 순서로 표현되는 자리에는 order 를 적지 않는다 (R16.5)', () => {
+  for (const file of splitDocument(original(), schema)) {
+    assert.ok(!file.content.includes('order:'), file.path)
+  }
 })
 
 test('노드는 자기가 정의한 내용만 소유한다', () => {
@@ -134,7 +140,7 @@ test('섹션이 정한 기본 역할은 적지 않고 읽을 때 되살린다', 
   assert.match(example, /role=counter-example/)
 })
 
-test('인덱스를 따라 주입해 원래 트리로 합쳐진다', () => {
+test('하위 디렉터리를 찾아 규약 순서로 주입해 원래 트리로 합쳐진다', () => {
   const result = assemble(splitDocument(original(), schema))
   assert.deepEqual(result.diagnostics, [])
 
@@ -178,26 +184,70 @@ test('NODE001 — 루트 노드 파일이 없으면 오류', () => {
   assert.equal(result.diagnostics[0]?.code, 'NODE001')
 })
 
-test('NODE002 — 인덱스가 가리키는 노드가 없으면 오류', () => {
+test('노드 디렉터리를 지우면 그 노드만 빠진다 — 부모는 고치지 않는다', () => {
   const files = splitDocument(original(), schema).filter(
     (file) => !file.path.endsWith(`norm/${NODE_FILE}`),
   )
   const result = assemble(files)
-  assert.ok(result.diagnostics.some((item) => item.code === 'NODE002'))
-  // 나머지는 그대로 합쳐진다
+  assert.deepEqual(result.diagnostics, [])
   assert.deepEqual(
     result.document?.sections.map((section) => section.key),
     ['rationale', 'example'],
   )
 })
 
-test('NODE003 — 인덱스에 없는 디렉터리는 경고', () => {
+test('노드 디렉터리를 더하면 부모를 고치지 않아도 끼워진다', () => {
   const files = [
     ...splitDocument(original(), schema),
-    { path: `principle/${NAME}/떠도는노드/${NODE_FILE}`, content: '---\n---\n\n문단.\n' },
+    { path: `principle/${NAME}/rationale/또-다른-경우/${NODE_FILE}`, content: '---\ntitle: 또 다른 경우\n---\n\n문단.\n' },
+  ]
+  const result = assemble(files)
+  assert.deepEqual(
+    result.document?.sections[1]?.sections.map((section) => section.key),
+    ['더-좁은-경우', '또-다른-경우'],
+  )
+})
+
+test('NODE003 — 노드 파일이 없는 디렉터리는 경고하고 건너뛴다 (R16.8)', () => {
+  const files = [
+    ...splitDocument(original(), schema),
+    { path: `principle/${NAME}/껍데기/메모.txt`, content: '남은 파일' },
   ]
   const result = assemble(files)
   assert.ok(result.diagnostics.some((item) => item.code === 'NODE003'))
+  assert.deepEqual(
+    result.document?.sections.map((section) => section.key),
+    ['norm', 'rationale', 'example'],
+  )
+})
+
+test('NODE007 — 옛 children 인덱스는 그 순서로 읽고 알린다 (R16.7)', () => {
+  const files = [
+    {
+      path: `principle/${NAME}/${NODE_FILE}`,
+      content: `---\ntype: principle\nid: ${NAME}\nchildren:\n  - norm\n---\n\n`,
+    },
+    { path: `principle/${NAME}/norm/${NODE_FILE}`, content: '---\n---\n\n진술.\n' },
+  ]
+  const result = assemble(files)
+  assert.ok(result.diagnostics.some((item) => item.code === 'NODE007'))
+  assert.deepEqual(result.document?.sections.map((section) => section.key), ['norm'])
+  // 다시 흩으면 인덱스가 빠진다
+  assert.ok(!splitDocument(result.document!, schema)[0]!.content.includes('children:'))
+})
+
+test('NODE002 · NODE003 — 옛 인덱스와 디렉터리가 어긋나면 알린다', () => {
+  const files = [
+    {
+      path: `principle/${NAME}/${NODE_FILE}`,
+      content: `---\ntype: principle\nid: ${NAME}\nchildren: [norm, rationale]\n---\n\n`,
+    },
+    { path: `principle/${NAME}/norm/${NODE_FILE}`, content: '---\n---\n\n진술.\n' },
+    { path: `principle/${NAME}/example/${NODE_FILE}`, content: '---\n---\n\n예.\n' },
+  ]
+  const codes = assemble(files).diagnostics.map((item) => item.code)
+  assert.ok(codes.includes('NODE002'))
+  assert.ok(codes.includes('NODE003'))
 })
 
 test('NODE004 — 노드 파일 안의 제목은 경고', () => {

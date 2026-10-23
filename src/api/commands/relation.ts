@@ -82,10 +82,16 @@ export class RelationLink implements CommandHandler<LinkRelation> {
         }),
       )
     }
-    if (
-      address.document === document.id &&
-      (address.fragment === null || address.fragment.kind !== 'stable')
-    ) {
+    // 위치 주소는 다른 편집에 밀려 다른 노드를 가리키게 된다. 다른 문서여도 같다 (REF006).
+    if (address.fragment !== null && address.fragment.kind !== 'stable') {
+      return fail(
+        refusal('CMD016', '관계는 문서나 안정 주소로만 걸 수 있습니다', {
+          document: document.id,
+          hint: '위치 주소는 편집하면 달라집니다. 대상에 `<!-- dk: id=… -->` 로 이름을 주세요',
+        }),
+      )
+    }
+    if (address.document === document.id && address.fragment === null) {
       return fail(
         refusal('CMD016', '같은 문서 안의 링크는 안정 주소로만 걸 수 있습니다', {
           document: document.id,

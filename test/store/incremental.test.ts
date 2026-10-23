@@ -222,7 +222,7 @@ test('노드 디렉터리로 흩어진 문서도 증분으로 돈다', () => {
     mkdirSync(join(base, 'rationale'), { recursive: true })
     writeFileSync(
       join(base, 'node.md'),
-      `---\ntype: principle\nid: 흩어진-문서\nsubject: []\nstatus: active\nchildren: [norm, rationale]\n---\n`,
+      `---\ntype: principle\nid: 흩어진-문서\nsubject: []\nstatus: active\n---\n`,
       'utf8',
     )
     writeFileSync(join(base, 'norm', 'node.md'), '---\n---\n\n흩어진 규범이다.\n', 'utf8')
@@ -241,6 +241,41 @@ test('노드 디렉터리로 흩어진 문서도 증분으로 돈다', () => {
     const third = indexWorkspace({ root, schema, store })
     assert.equal(third.stats.parsed, 1)
     assert.notEqual(third.root, first.root)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('노드를 더하거나 노드 파일 없는 디렉터리가 생기면 캐시가 빗나간다', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dockit-inc-shell-'))
+  const store = join(root, '.store')
+  try {
+    const base = join(root, 'principle', '흩어진-문서')
+    mkdirSync(join(base, 'norm'), { recursive: true })
+    writeFileSync(join(base, 'node.md'), '---\ntype: principle\nid: 흩어진-문서\n---\n', 'utf8')
+    writeFileSync(join(base, 'norm', 'node.md'), '---\n---\n\n규범이다.\n', 'utf8')
+    indexWorkspace({ root, schema, store })
+
+    // 부모를 고치지 않고 노드를 더한다
+    mkdirSync(join(base, 'rationale'))
+    writeFileSync(join(base, 'rationale', 'node.md'), '---\n---\n\n근거다.\n', 'utf8')
+    const added = indexWorkspace({ root, schema, store })
+    assert.equal(added.stats.parsed, 1)
+    assert.deepEqual(
+      added.workspace.document('principle/흩어진-문서')!.sections.map((section) => section.key),
+      ['norm', 'rationale'],
+    )
+
+    // 병합이 남긴 껍데기 — 노드 파일은 없고 다른 파일만 있다
+    mkdirSync(join(base, '껍데기'))
+    writeFileSync(join(base, '껍데기', '메모.txt'), '남은 파일', 'utf8')
+    const shell = indexWorkspace({ root, schema, store })
+    assert.equal(shell.stats.parsed, 1)
+    assert.ok(shell.workspace.diagnostics.some((item) => item.code === 'NODE003'))
+    // 그대로 다시 돌려도 진단이 캐시에서 되살아난다
+    const again = indexWorkspace({ root, schema, store })
+    assert.equal(again.stats.parsed, 0)
+    assert.ok(again.workspace.diagnostics.some((item) => item.code === 'NODE003'))
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

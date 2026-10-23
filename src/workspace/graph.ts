@@ -4,7 +4,7 @@
  */
 
 import { type Diagnostic, diagnostic } from '../diagnostic/index.js'
-import { parseAddress } from '../model/index.js'
+import { isDocumentFragment, parseAddress } from '../model/index.js'
 import type { Schema } from '../schema/index.js'
 import { type NodeRecord, normalizeText } from './record.js'
 
@@ -72,6 +72,29 @@ function checkTargets(records: readonly NodeRecord[]): Diagnostic[] {
           documents.has(parsed.document)
             ? '문서는 있지만 그 안에 그런 노드가 없습니다. 안정 식별자를 확인하세요'
             : '문서 자체가 없습니다'),
+      )
+    }
+  }
+  return diagnostics
+}
+
+/**
+ * REF006 — 위치 주소로 건 링크.
+ *
+ * `#norm/2` 는 형제 중 몇 번째인지를 말한다. 다른 브랜치가 그 앞에 블록 하나만 끼워도
+ * 링크는 **다른 노드**를 가리키게 되고, 가리키는 곳이 있으므로 REF002 도 나지 않는다.
+ * 텍스트 병합이 놓치는 깨짐이므로 오류로 막는다.
+ */
+function checkStableTargets(records: readonly NodeRecord[]): Diagnostic[] {
+  const diagnostics: Diagnostic[] = []
+  for (const record of records) {
+    for (const relation of record.relations) {
+      const parsed = parseAddress(relation.target)
+      if (parsed === null || isDocumentFragment(parsed.fragment)) continue
+      if (parsed.fragment!.kind === 'stable') continue
+      diagnostics.push(
+        report('REF006', 'error', `위치 주소로 건 링크입니다: ${relation.target}`, record,
+          '위치 주소는 다른 편집에 밀려 다른 노드를 가리키게 됩니다. 대상에 `<!-- dk: id=… -->` 로 이름을 주고 그 이름으로 거세요'),
       )
     }
   }
@@ -217,6 +240,7 @@ export function buildGraph(records: readonly NodeRecord[], schema: Schema): Rela
     edges,
     diagnostics: [
       ...checkTargets(records),
+      ...checkStableTargets(records),
       ...checkCycles(records, schema),
       ...checkSymmetry(records, schema),
       ...checkDuplicates(records),

@@ -12,9 +12,4 @@ since: 2026-09-15
 level: should
 refines:
   - principle/층은-한-방향으로만-의존한다#core
-children:
-  - norm
-  - rationale
-  - example
-  - exception
 ---

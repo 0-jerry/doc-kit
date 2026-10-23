@@ -1,8 +1,9 @@
 /**
  * 흩어진 노드 파일을 읽어 문서 하나로 합친다 — "주입"에 해당하는 과정이다.
  *
- * 부모는 자식을 소유하지 않는다. 자기 내용과 하위 노드 **인덱스**만 들고 있고,
- * 조립기가 그 인덱스를 따라 실제 노드를 가져다 끼운다.
+ * 부모는 자식을 소유하지 않는다. 자기 내용만 들고 있고, 조립기가 하위 디렉터리에서
+ * 노드를 찾아 순서대로 끼운다. 디렉터리가 곧 인덱스이므로 형제를 더하는 일이 부모 파일을
+ * 고치지 않는다 — 서로 다른 브랜치에서 노드를 더해도 충돌하지 않는다.
  */
 
 import { type Diagnostic, diagnostic } from '../diagnostic/index.js'
@@ -18,6 +19,7 @@ import {
 import { type SourceParse, parseSource } from '../parse/index.js'
 import type { Schema } from '../schema/index.js'
 import { NODE_FILE, childDirectory, documentDirectory, nodePath } from './layout.js'
+import { compareSiblings, rankerAt } from './order.js'
 
 /** 파일을 읽어 오는 방법. 파일 시스템을 직접 알지 않게 해 테스트를 쉽게 한다. */
 export interface NodeFiles {
@@ -55,18 +57,23 @@ function report(
   })
 }
 
+/** 하위 노드 이름으로 쓸 수 있는가. 경로로 쓰이므로 구분자나 상위 참조는 안 된다. */
+function isNodeName(key: string): boolean {
+  return isSectionKey(key) && key !== '.' && key !== '..'
+}
+
 /**
- * 인덱스에 적힌 하위 노드 이름들을 거른다.
+ * 옛 `children` 인덱스에 적힌 하위 노드 이름들을 거른다.
  *
  * 인덱스는 작성자가 쓴 값이고 곧 디렉터리 이름이 된다. 걸러 내지 않으면
  * `../..` 같은 값으로 작업공간 밖을 읽게 된다 — 경로로 쓰기 전에 본다.
  */
-function indexOf(source: SourceParse, path: string, diagnostics: Diagnostic[]): readonly string[] {
+function legacyIndexOf(index: readonly string[], path: string, diagnostics: Diagnostic[]): readonly string[] {
   const keys: string[] = []
   const seen = new Set<string>()
 
-  for (const key of source.reserved.get('children') ?? []) {
-    if (!isSectionKey(key) || key === '.' || key === '..') {
+  for (const key of index) {
+    if (!isNodeName(key)) {
       diagnostics.push(
         report('NODE005', 'error', `하위 노드 이름으로 쓸 수 없습니다: ${key}`, path,
           '이름은 디렉터리 하나를 가리켜야 합니다. 경로 구분자나 상위 참조는 쓸 수 없습니다'),
@@ -95,7 +102,7 @@ function reportInlineHeadings(
   if (!children.some((child) => child instanceof Section)) return
   diagnostics.push(
     report('NODE004', 'warning', '노드 파일 안에 제목이 있습니다', path,
-      '제목은 노드를 만듭니다. 하위 디렉터리로 나누고 children 에 더하세요'),
+      '제목은 노드를 만듭니다. 하위 디렉터리로 나누세요'),
   )
 }
 
@@ -126,23 +133,23 @@ interface ReadContext {
   readonly diagnostics: Diagnostic[]
 }
 
-/** 노드 하나와 그 자손을 읽는다. */
+/** 읽은 노드 하나와, 형제 사이에서 자리를 정하는 데 쓸 `order`. */
+interface ReadNode {
+  readonly section: Section
+  readonly order: string
+}
+
+/** 노드 하나와 그 자손을 읽는다. 노드 파일이 없으면 null — 호출자가 무엇이 빠졌는지 알린다. */
 function readNode(
   context: ReadContext,
   directory: string,
   key: string,
   keyPath: readonly string[],
   depth: number,
-): Section | null {
+): ReadNode | null {
   const path = nodePath(directory)
   const text = context.files.read(path)
-  if (text === null) {
-    context.diagnostics.push(
-      report('NODE002', 'error', `인덱스가 가리키는 노드가 없습니다: ${key}`, path,
-        `${directory}/${NODE_FILE} 를 만들거나 부모의 children 에서 빼세요`),
-    )
-    return null
-  }
+  if (text === null) return null
 
   const source = parseSource(text, {
     schema: context.schema,
@@ -165,20 +172,23 @@ function readNode(
     context.schema.sectionAt(context.type, keyPath)?.heading ??
     key
 
-  return new Section({
-    key,
-    heading,
-    depth,
-    aux: source.aux,
-    stableId: source.stableId,
-    // 제목 줄은 어느 파일에도 없다. 합칠 때 새로 쓴다.
-    raw: null,
-    origin: null,
-    children: [...own, ...injected],
-  })
+  return {
+    section: new Section({
+      key,
+      heading,
+      depth,
+      aux: source.aux,
+      stableId: source.stableId,
+      // 제목 줄은 어느 파일에도 없다. 합칠 때 새로 쓴다.
+      raw: null,
+      origin: null,
+      children: [...own, ...injected],
+    }),
+    order: source.reserved.get('order')?.[0] ?? '',
+  }
 }
 
-/** 인덱스를 따라 하위 노드를 가져다 끼운다. */
+/** 하위 노드를 찾아 순서대로 끼운다. 옛 인덱스가 있으면 그것을 따른다. */
 function readChildren(
   context: ReadContext,
   directory: string,
@@ -186,18 +196,77 @@ function readChildren(
   keyPath: readonly string[],
   depth: number,
 ): Section[] {
-  const index = indexOf(source, nodePath(directory), context.diagnostics)
+  const legacy = source.reserved.get('children')
+  if (legacy !== undefined) {
+    return readLegacyChildren(context, directory, legacy, keyPath, depth)
+  }
+
+  const path = nodePath(directory)
+  const rank = rankerAt(context.schema, context.type, keyPath)
+  const found: (ReadNode & { readonly name: string })[] = []
+
+  for (const name of context.files.directories(directory)) {
+    if (!isNodeName(name)) {
+      context.diagnostics.push(
+        report('NODE005', 'error', `하위 노드 이름으로 쓸 수 없습니다: ${name}`, path,
+          '이름은 섹션 키가 됩니다. 숫자로만 된 이름이나 주소 구분자는 쓸 수 없습니다'),
+      )
+      continue
+    }
+    const node = readNode(context, childDirectory(directory, name), name, [...keyPath, name], depth + 1)
+    if (node === null) {
+      // 병합에서 한쪽이 노드를 지우고 다른 쪽이 그 디렉터리에 파일을 더하면 껍데기만 남는다.
+      if (context.files.read(nodePath(childDirectory(directory, name))) === null) {
+        context.diagnostics.push(
+          report('NODE003', 'warning', `노드 파일이 없는 디렉터리입니다: ${name}`, path,
+            `${childDirectory(directory, name)}/${NODE_FILE} 를 만들거나 디렉터리를 지우세요`),
+        )
+      }
+      continue
+    }
+    found.push({ ...node, name })
+  }
+
+  return found
+    .sort((a, b) =>
+      compareSiblings(
+        { rank: rank(a.name), order: a.order, name: a.name },
+        { rank: rank(b.name), order: b.order, name: b.name },
+      ),
+    )
+    .map((node) => node.section)
+}
+
+/** 옛 `children` 인덱스를 따라 끼운다. 인덱스는 형제 모두가 고치는 목록이라 병합에 약하다. */
+function readLegacyChildren(
+  context: ReadContext,
+  directory: string,
+  legacy: readonly string[],
+  keyPath: readonly string[],
+  depth: number,
+): Section[] {
+  const path = nodePath(directory)
+  context.diagnostics.push(
+    report('NODE007', 'warning', 'children 인덱스는 더 쓰지 않습니다', path,
+      '하위 디렉터리가 곧 인덱스입니다. `dockit split --document <id>` 로 다시 쓰면 인덱스가 빠집니다'),
+  )
+
+  const index = legacyIndexOf(legacy, path, context.diagnostics)
   const sections: Section[] = []
 
   for (const key of index) {
-    const section = readNode(
-      context,
-      childDirectory(directory, key),
-      key,
-      [...keyPath, key],
-      depth + 1,
-    )
-    if (section !== null) sections.push(section)
+    const child = childDirectory(directory, key)
+    const node = readNode(context, child, key, [...keyPath, key], depth + 1)
+    if (node !== null) {
+      sections.push(node.section)
+      continue
+    }
+    if (context.files.read(nodePath(child)) === null) {
+      context.diagnostics.push(
+        report('NODE002', 'error', `인덱스가 가리키는 노드가 없습니다: ${key}`, nodePath(child),
+          `${child}/${NODE_FILE} 를 만들거나 부모의 children 에서 빼세요`),
+      )
+    }
   }
 
   // 디렉터리는 있는데 인덱스에 없으면 합쳐지지 않는다. 조용히 빠지지 않게 알린다.
@@ -205,7 +274,7 @@ function readChildren(
   for (const found of context.files.directories(directory)) {
     if (indexed.has(found)) continue
     context.diagnostics.push(
-      report('NODE003', 'warning', `인덱스에 없는 노드 디렉터리입니다: ${found}`, nodePath(directory),
+      report('NODE003', 'warning', `인덱스에 없는 노드 디렉터리입니다: ${found}`, path,
         `children 에 '${found}' 를 더하거나 디렉터리를 지우세요`),
     )
   }

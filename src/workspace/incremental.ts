@@ -79,21 +79,32 @@ interface Derived {
   readonly diagnostics: readonly Diagnostic[]
 }
 
-/** 문서 하나를 이루는 파일들. 노드 트리는 디렉터리를 타고 내려가며 모은다. */
-function filesOf(root: string, source: DocumentSource): string[] {
-  if (source.kind === 'file') return [source.path]
+/**
+ * 문서 하나를 이루는 파일들. 노드 트리는 디렉터리를 타고 내려가며 모은다.
+ *
+ * `node.md` 가 없는 디렉터리는 내용이 없지만 진단(NODE003)을 바꾸므로 껍데기로 따로 센다 —
+ * 지문에 넣지 않으면 그 디렉터리가 생기거나 사라져도 지난 진단이 그대로 나온다.
+ */
+function filesOf(root: string, source: DocumentSource): { paths: string[]; shells: string[] } {
+  if (source.kind === 'file') return { paths: [source.path], shells: [] }
 
   const directory = `${source.collection}/${source.name}`
   const paths: string[] = []
+  const shells: string[] = []
   // 디렉터리마다 한 번만 읽는다. 노드 파일이 있는지와 하위 디렉터리를 같은 목록에서 안다.
   const walk = (relative: string): void => {
+    let hasNode = false
     for (const entry of readEntries(join(root, relative))) {
       if (entry.isDirectory) walk(`${relative}/${entry.name}`)
-      else if (entry.name === NODE_FILE) paths.push(`${relative}/${NODE_FILE}`)
+      else if (entry.name === NODE_FILE) {
+        paths.push(`${relative}/${NODE_FILE}`)
+        hasNode = true
+      }
     }
+    if (!hasNode) shells.push(`${relative}/`)
   }
   walk(directory)
-  return paths
+  return { paths, shells }
 }
 
 /** 지연 파싱 항목. `.document` 를 처음 읽을 때 파싱한다. */
@@ -159,11 +170,11 @@ export function indexWorkspace(options: IndexOptions): IndexResult {
 
   for (const source of sources) {
     const id = `${source.collection}/${source.name}`
-    const paths = filesOf(root, source)
-    const fingerprint = paths
-      .sort()
-      .map((path) => `${path}\0${stat.hashOf(path) ?? ''}`)
-      .join('\n')
+    const { paths, shells } = filesOf(root, source)
+    const fingerprint = [
+      ...paths.sort().map((path) => `${path}\0${stat.hashOf(path) ?? ''}`),
+      ...shells.sort(),
+    ].join('\n')
     const key = derived.key([schemaHash, fingerprint, String(options.validate !== false)])
     derivedKeys.push(key)
 

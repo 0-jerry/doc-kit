@@ -11,9 +11,4 @@ topic:
 status: active
 since: 2026-10-15
 level: must
-children:
-  - norm
-  - rationale
-  - example
-  - exception
 ---
